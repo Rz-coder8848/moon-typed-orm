@@ -46,7 +46,7 @@ pub fn ExecResult::new(
 /// in-memory backend evaluates them directly. This trait is the replaceable
 /// boundary — swap [`Memory`] for a SQLite or Postgres driver without touching
 /// call sites.
-pub trait Connection {
+pub(open) trait Connection {
   fn select(Self, Select) -> Array[Row] raise OrmError
   fn insert(Self, Insert) -> ExecResult raise OrmError
   fn update(Self, Update) -> ExecResult raise OrmError

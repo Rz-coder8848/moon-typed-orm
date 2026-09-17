@@ -7,6 +7,14 @@ pub suberror OrmError {
 }
 
 ///|
+/// Smart constructor for backend errors. Like [`Value`], `OrmError`'s variants
+/// are read-only outside this package; drivers raise backend failures through
+/// this instead of building the variant directly.
+pub fn OrmError::backend(why : String) -> OrmError {
+  OrmError::Backend(why)
+}
+
+///|
 /// Human-readable message, used for error reporting.
 pub fn OrmError::message(self : OrmError) -> String {
   match self {
