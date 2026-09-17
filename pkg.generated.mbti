@@ -1,0 +1,191 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "moonorm/moonorm"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/hashmap",
+}
+
+// Values
+
+// Errors
+pub suberror OrmError {
+  InvalidIdentifier(String)
+  InvalidQuery(String)
+  Backend(String)
+}
+pub fn OrmError::message(Self) -> String
+
+// Types and methods
+pub struct Assignment {
+  column : ColumnRef
+  value : Value
+} derive(Eq, @debug.Debug)
+
+pub struct Column[T] {
+  reference : ColumnRef
+}
+pub fn[T] Column::asc(Self[T]) -> Order
+pub fn[T] Column::desc(Self[T]) -> Order
+pub fn[T : ToValue] Column::eq(Self[T], T) -> Condition
+pub fn[T : ToValue] Column::gt(Self[T], T) -> Condition
+pub fn[T : ToValue] Column::gte(Self[T], T) -> Condition
+pub fn[T : ToValue] Column::in_(Self[T], Array[T]) -> Condition
+pub fn[T] Column::is_not_null(Self[T]) -> Condition
+pub fn[T] Column::is_null(Self[T]) -> Condition
+pub fn[T : ToValue] Column::like(Self[T], T) -> Condition
+pub fn[T : ToValue] Column::lt(Self[T], T) -> Condition
+pub fn[T : ToValue] Column::lte(Self[T], T) -> Condition
+pub fn[T] Column::name(Self[T]) -> String
+pub fn[T : ToValue] Column::ne(Self[T], T) -> Condition
+pub fn[T] Column::new(String, String) -> Self[T]
+pub fn[T : ToValue] Column::set(Self[T], T) -> Assignment
+pub fn[T] Column::table(Self[T]) -> String
+pub fn[T] Column::to_ref(Self[T]) -> ColumnRef
+
+pub struct ColumnRef {
+  table : String
+  name : String
+} derive(Eq, @debug.Debug)
+
+pub enum CompareOp {
+  Eq
+  Ne
+  Gt
+  Gte
+  Lt
+  Lte
+  Like
+} derive(Eq, @debug.Debug)
+
+pub enum Condition {
+  Compare(ColumnRef, CompareOp, Value)
+  In(ColumnRef, Array[Value])
+  IsNull(ColumnRef)
+  IsNotNull(ColumnRef)
+  And(Condition, Condition)
+  Or(Condition, Condition)
+  Not(Condition)
+  Raw(String)
+} derive(Eq, @debug.Debug)
+pub fn Condition::and_(Self, Self) -> Self
+pub fn Condition::not_(Self) -> Self
+pub fn Condition::or_(Self, Self) -> Self
+pub fn Condition::raw(String) -> Self
+
+pub struct Delete {
+  table : String
+  condition : Condition?
+}
+pub fn Delete::build(Self) -> Statement raise OrmError
+pub fn Delete::from(String) -> Self
+pub fn Delete::where_(Self, Condition) -> Self
+
+pub struct ExecResult {
+  rows_affected : Int
+  last_insert_id : Int?
+} derive(Eq, @debug.Debug)
+pub fn ExecResult::new(Int, last_insert_id? : Int) -> Self
+
+pub struct Insert {
+  table : String
+  assignments : Array[Assignment]
+}
+pub fn Insert::build(Self) -> Statement raise OrmError
+pub fn Insert::into(String) -> Self
+pub fn Insert::set(Self, Assignment) -> Self
+
+pub struct Memory {
+  tables : @hashmap.HashMap[String, MemoryTable]
+}
+pub fn Memory::create_table(Self, String, Array[String]) -> Unit raise OrmError
+pub fn Memory::delete(Self, Delete) -> ExecResult raise OrmError
+pub fn Memory::insert(Self, Insert) -> ExecResult raise OrmError
+pub fn Memory::new() -> Self
+pub fn Memory::select(Self, Select) -> Array[Row] raise OrmError
+pub fn Memory::update(Self, Update) -> ExecResult raise OrmError
+pub impl Connection for Memory
+
+type MemoryTable
+
+pub enum Order {
+  Asc(ColumnRef)
+  Desc(ColumnRef)
+} derive(Eq, @debug.Debug)
+
+pub struct Row {
+  columns : Array[String]
+  values : Array[Value]
+} derive(Eq, @debug.Debug)
+pub fn Row::get(Self, String) -> Value?
+pub fn Row::get_at(Self, Int) -> Value?
+pub fn Row::new(Array[String], Array[Value]) -> Self
+
+pub struct Select {
+  table : String
+  columns : Array[ColumnRef]
+  condition : Condition?
+  orders : Array[Order]
+  limit : Int?
+  offset : Int?
+}
+pub fn Select::build(Self) -> Statement raise OrmError
+pub fn Select::columns(Self, Array[ColumnRef]) -> Self
+pub fn Select::from(String) -> Self
+pub fn Select::limit(Self, Int) -> Self
+pub fn Select::offset(Self, Int) -> Self
+pub fn Select::order_by(Self, Order) -> Self
+pub fn Select::where_(Self, Condition) -> Self
+
+pub struct Statement {
+  sql : String
+  params : Array[Value]
+} derive(Eq, @debug.Debug)
+pub fn Statement::to_params(Self) -> Array[Value]
+pub fn Statement::to_sql(Self) -> String
+
+pub struct Update {
+  table : String
+  assignments : Array[Assignment]
+  condition : Condition?
+}
+pub fn Update::build(Self) -> Statement raise OrmError
+pub fn Update::set(Self, Assignment) -> Self
+pub fn Update::table(String) -> Self
+pub fn Update::where_(Self, Condition) -> Self
+
+pub enum Value {
+  Null
+  Bool(Bool)
+  Int(Int)
+  Float(Double)
+  Text(String)
+  Blob(Bytes)
+} derive(Eq, @debug.Debug)
+pub fn Value::blob(Bytes) -> Self
+pub fn Value::bool(Bool) -> Self
+pub fn Value::float(Double) -> Self
+pub fn Value::int(Int) -> Self
+pub fn Value::null() -> Self
+pub fn Value::text(String) -> Self
+pub fn Value::type_name(Self) -> String
+pub impl ToValue for Value
+
+// Type aliases
+
+// Traits
+pub trait Connection {
+  fn select(Self, Select) -> Array[Row] raise OrmError
+  fn insert(Self, Insert) -> ExecResult raise OrmError
+  fn update(Self, Update) -> ExecResult raise OrmError
+  fn delete(Self, Delete) -> ExecResult raise OrmError
+}
+
+pub trait ToValue {
+  fn to_value(Self) -> Value
+}
+pub impl ToValue for Bool
+pub impl ToValue for Int
+pub impl ToValue for Double
+pub impl ToValue for String
+pub impl ToValue for Bytes

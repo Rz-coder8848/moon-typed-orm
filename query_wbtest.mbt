@@ -1,0 +1,156 @@
+///|
+/// White-box tests for the SQL builders. These pin the exact SQL text and
+/// parameter order, since the builders are the public contract of the library.
+test "value type names" {
+  assert_eq(Value::Null.type_name(), "null")
+  assert_eq(Value::Int(1).type_name(), "int")
+  assert_eq(Value::Float(1.5).type_name(), "float")
+  assert_eq(Value::Text("x").type_name(), "text")
+  assert_eq(Value::Bool(true).type_name(), "bool")
+}
+
+///|
+test "select defaults to star with no filters" {
+  let stmt = try! Select::from("users").build()
+  assert_eq(stmt.sql, "SELECT * FROM \"users\"")
+  assert_true(stmt.params.is_empty())
+}
+
+///|
+test "select renders where order limit offset" {
+  let age : Column[Int] = Column::new("users", "age")
+  let stmt = try! Select::from("users")
+    .where_(age.gt(18))
+    .order_by(age.desc())
+    .limit(10)
+    .offset(5)
+    .build()
+  assert_eq(
+    stmt.sql,
+    "SELECT * FROM \"users\" WHERE \"users\".\"age\" > ? ORDER BY \"users\".\"age\" DESC LIMIT 10 OFFSET 5",
+  )
+  assert_eq(stmt.params, [Value::Int(18)])
+}
+
+///|
+test "select with explicit columns" {
+  let id : Column[Int] = Column::new("users", "id")
+  let email : Column[String] = Column::new("users", "email")
+  let stmt = try! Select::from("users")
+    .columns([id.to_ref(), email.to_ref()])
+    .build()
+  assert_eq(
+    stmt.sql,
+    "SELECT \"users\".\"id\", \"users\".\"email\" FROM \"users\"",
+  )
+}
+
+///|
+test "and or combine into parenthesized sql" {
+  let age : Column[Int] = Column::new("users", "age")
+  let name : Column[String] = Column::new("users", "name")
+  let cond = age.gte(18).and_(name.eq("alice").or_(name.eq("bob")))
+  let stmt = try! Select::from("users").where_(cond).build()
+  assert_eq(
+    stmt.sql,
+    "SELECT * FROM \"users\" WHERE (\"users\".\"age\" >= ? AND (\"users\".\"name\" = ? OR \"users\".\"name\" = ?))",
+  )
+  assert_eq(stmt.params, [
+    Value::Int(18),
+    Value::Text("alice"),
+    Value::Text("bob"),
+  ])
+}
+
+///|
+test "in and null conditions" {
+  let id : Column[Int] = Column::new("users", "id")
+  let name : Column[String] = Column::new("users", "name")
+  let cond = id.in_([1, 2, 3]).and_(name.is_null())
+  let stmt = try! Select::from("users").where_(cond).build()
+  assert_eq(
+    stmt.sql,
+    "SELECT * FROM \"users\" WHERE (\"users\".\"id\" IN (?, ?, ?) AND \"users\".\"name\" IS NULL)",
+  )
+  assert_eq(stmt.params, [Value::Int(1), Value::Int(2), Value::Int(3)])
+}
+
+///|
+test "not and raw conditions" {
+  let age : Column[Int] = Column::new("users", "age")
+  let cond = age.is_null().not_().and_(Condition::raw("age > 0"))
+  let stmt = try! Select::from("users").where_(cond).build()
+  assert_eq(
+    stmt.sql,
+    "SELECT * FROM \"users\" WHERE ((NOT \"users\".\"age\" IS NULL) AND age > 0)",
+  )
+  assert_true(stmt.params.is_empty())
+}
+
+///|
+test "insert renders placeholders" {
+  let email : Column[String] = Column::new("users", "email")
+  let age : Column[Int] = Column::new("users", "age")
+  let stmt = try! Insert::into("users")
+    .set(email.set("a@b.com"))
+    .set(age.set(30))
+    .build()
+  assert_eq(
+    stmt.sql,
+    "INSERT INTO \"users\" (\"email\", \"age\") VALUES (?, ?)",
+  )
+  assert_eq(stmt.params, [Value::Text("a@b.com"), Value::Int(30)])
+}
+
+///|
+test "update renders set and where" {
+  let age : Column[Int] = Column::new("users", "age")
+  let stmt = try! Update::table("users")
+    .set(age.set(31))
+    .where_(age.eq(30))
+    .build()
+  assert_eq(
+    stmt.sql,
+    "UPDATE \"users\" SET \"age\" = ? WHERE \"users\".\"age\" = ?",
+  )
+  assert_eq(stmt.params, [Value::Int(31), Value::Int(30)])
+}
+
+///|
+test "delete renders where" {
+  let age : Column[Int] = Column::new("users", "age")
+  let stmt = try! Delete::from("users").where_(age.lt(18)).build()
+  assert_eq(stmt.sql, "DELETE FROM \"users\" WHERE \"users\".\"age\" < ?")
+  assert_eq(stmt.params, [Value::Int(18)])
+}
+
+///|
+test "insert without assignments raises" {
+  try {
+    let _ = Insert::into("users").build()
+    panic()
+  } catch {
+    OrmError::InvalidQuery(_) => ()
+    _ => panic()
+  }
+}
+
+///|
+test "empty table name raises" {
+  try {
+    let _ = Select::from("").build()
+    panic()
+  } catch {
+    OrmError::InvalidIdentifier(_) => ()
+    _ => panic()
+  }
+}
+
+///|
+test "row get by column name and index" {
+  let row = Row::new(["id", "email"], [Value::Int(1), Value::Text("a@b.com")])
+  assert_eq(row.get("email"), Some(Value::Text("a@b.com")))
+  assert_eq(row.get("missing"), None)
+  assert_eq(row.get_at(0), Some(Value::Int(1)))
+  assert_eq(row.get_at(9), None)
+}

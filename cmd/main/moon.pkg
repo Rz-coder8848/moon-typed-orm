@@ -1,0 +1,5 @@
+import {
+  "moonorm/moonorm",
+}
+
+pkgtype(kind: "executable")
