@@ -3,8 +3,8 @@
 ///
 /// Implements [`Connection`] by evaluating the structured builders directly, so
 /// query code runs unchanged against this backend or a future SQL driver.
-/// Single-table only (the builders emit no joins); `raw` SQL conditions are
-/// rejected with [`OrmError::Backend`].
+/// Supports a single inner join (nested-loop) in addition to single-table
+/// queries; `raw` SQL conditions are rejected with [`OrmError::Backend`].
 pub struct Memory {
   tables : @hashmap.HashMap[String, MemoryTable]
 }
@@ -70,31 +70,62 @@ fn get_table(
 }
 
 ///|
+/// Inner-join two tables by nesting loops over their rows and keeping the
+/// combinations that satisfy `join.on`. Column names are qualified with their
+/// table so columns from either side stay addressable.
+fn join_rows(
+  mem : Memory,
+  left_table : String,
+  join : Join,
+) -> (Array[String], Array[Array[Value]]) raise OrmError {
+  let left = get_table(mem.tables, left_table)
+  let right = get_table(mem.tables, join.table)
+  let columns = left.columns.map(fn(c) { left_table + "." + c }) +
+    right.columns.map(fn(c) { join.table + "." + c })
+  let rows : Array[Array[Value]] = []
+  for lr in left.rows {
+    for rr in right.rows {
+      let combined = lr + rr
+      if matches(Some(join.on), columns, combined) {
+        rows.push(combined)
+      }
+    }
+  }
+  (columns, rows)
+}
+
+///|
 fn mem_select(mem : Memory, query : Select) -> Array[Row] raise OrmError {
   validate_supported(query.condition)
   validate_supported(query.having)
-  let table = get_table(mem.tables, query.table)
-  let filtered = table.rows.filter(fn(row) {
-    matches(query.condition, table.columns, row)
-  })
+  match query.join {
+    Some(j) => validate_supported(Some(j.on))
+    None => ()
+  }
+  let (columns, rows) = match query.join {
+    None => {
+      let table = get_table(mem.tables, query.table)
+      (table.columns, table.rows)
+    }
+    Some(j) => join_rows(mem, query.table, j)
+  }
+  let filtered = rows.filter(fn(row) { matches(query.condition, columns, row) })
   if query.group_by.is_empty() {
     match query.aggregate {
       Some(agg) => {
-        let value = aggregate_value(agg, table.columns, filtered)
+        let value = aggregate_value(agg, columns, filtered)
         [Row::new([aggregate_label(agg)], [value])]
       }
       None => {
         if !query.orders.is_empty() {
-          filtered.sort_by(fn(a, b) {
-            row_compare(a, b, table.columns, query.orders)
-          })
+          filtered.sort_by(fn(a, b) { row_compare(a, b, columns, query.orders) })
         }
         let limited = apply_limit_offset(filtered, query.limit, query.offset)
-        project(limited, table.columns, query.columns)
+        project(limited, columns, query.columns)
       }
     }
   } else {
-    mem_select_grouped(table, query, filtered)
+    mem_select_grouped(columns, query, filtered)
   }
 }
 
@@ -165,6 +196,12 @@ fn eval_condition(
         None => false
         Some(actual) => compare_values(actual, op, value)
       }
+    Condition::CompareCol(left, op, right) =>
+      match
+        (column_value(left, columns, row), column_value(right, columns, row)) {
+        (Some(a), Some(b)) => compare_values(a, op, b)
+        _ => false
+      }
     Condition::In(col, values) =>
       match column_value(col, columns, row) {
         None => false
@@ -221,6 +258,12 @@ fn column_value(
   columns : Array[String],
   row : Array[Value],
 ) -> Value? {
+  let qualified = col.table + "." + col.name
+  for i, name in columns {
+    if name == qualified {
+      return row.get(i)
+    }
+  }
   for i, name in columns {
     if name == col.name {
       return row.get(i)
@@ -569,11 +612,11 @@ fn extreme_value(vals : Array[Value?], want_max : Bool) -> Value {
 /// each bucket collapses into one row (an aggregate over the bucket, or the
 /// distinct grouping key when there is no aggregate).
 fn mem_select_grouped(
-  table : MemoryTable,
+  columns : Array[String],
   query : Select,
   filtered : Array[Array[Value]],
 ) -> Array[Row] {
-  let groups = group_rows(filtered, table.columns, query.group_by)
+  let groups = group_rows(filtered, columns, query.group_by)
   let group_cols = query.group_by.map(fn(c) { c.name })
   let out_cols = match query.aggregate {
     None => group_cols
@@ -583,8 +626,7 @@ fn mem_select_grouped(
   for (key, group) in groups {
     if matches(query.having, group_cols, key) {
       match query.aggregate {
-        Some(agg) =>
-          out_rows.push(key + [aggregate_value(agg, table.columns, group)])
+        Some(agg) => out_rows.push(key + [aggregate_value(agg, columns, group)])
         None => out_rows.push(key)
       }
     }

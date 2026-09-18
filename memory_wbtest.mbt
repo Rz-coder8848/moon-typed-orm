@@ -187,6 +187,54 @@ test "memory group by with count aggregate" {
 }
 
 ///|
+test "memory inner join round trip" {
+  let db = Memory::new()
+  try! db.create_table("users", ["id", "name"])
+  try! db.create_table("orders", ["id", "user_id", "item"])
+  let users_id : Column[Int] = Column::new("users", "id")
+  let users_name : Column[String] = Column::new("users", "name")
+  let orders_id : Column[Int] = Column::new("orders", "id")
+  let orders_user_id : Column[Int] = Column::new("orders", "user_id")
+  let orders_item : Column[String] = Column::new("orders", "item")
+
+  let _ = try! db.insert(
+    Insert::into("users").set(users_id.set(1)).set(users_name.set("alice")),
+  )
+  let _ = try! db.insert(
+    Insert::into("users").set(users_id.set(2)).set(users_name.set("bob")),
+  )
+  let _ = try! db.insert(
+    Insert::into("orders")
+    .set(orders_id.set(100))
+    .set(orders_user_id.set(1))
+    .set(orders_item.set("book")),
+  )
+  let _ = try! db.insert(
+    Insert::into("orders")
+    .set(orders_id.set(101))
+    .set(orders_user_id.set(1))
+    .set(orders_item.set("pen")),
+  )
+  let _ = try! db.insert(
+    Insert::into("orders")
+    .set(orders_id.set(102))
+    .set(orders_user_id.set(2))
+    .set(orders_item.set("cup")),
+  )
+
+  let rows = try! db.select(
+    Select::from("users").join("orders", orders_user_id.eq_col(users_id)),
+  )
+  assert_eq(rows.length(), 3)
+  assert_eq(rows[0].get("users.name"), Some(Value::text("alice")))
+  assert_eq(rows[0].get("orders.item"), Some(Value::text("book")))
+  assert_eq(rows[1].get("users.name"), Some(Value::text("alice")))
+  assert_eq(rows[1].get("orders.item"), Some(Value::text("pen")))
+  assert_eq(rows[2].get("users.name"), Some(Value::text("bob")))
+  assert_eq(rows[2].get("orders.item"), Some(Value::text("cup")))
+}
+
+///|
 test "memory group by sum with having" {
   let db = Memory::new()
   try! db.create_table("t", ["city", "score"])

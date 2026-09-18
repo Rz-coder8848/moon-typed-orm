@@ -58,6 +58,7 @@ pub enum CompareOp {
 /// A boolean expression in a query.
 pub enum Condition {
   Compare(ColumnRef, CompareOp, Value)
+  CompareCol(ColumnRef, CompareOp, ColumnRef)
   In(ColumnRef, Array[Value])
   IsNull(ColumnRef)
   IsNotNull(ColumnRef)
@@ -150,6 +151,13 @@ pub fn[T : ToValue] Column::lte(self : Column[T], value : T) -> Condition {
 ///|
 pub fn[T : ToValue] Column::like(self : Column[T], value : T) -> Condition {
   Condition::Compare(self.reference, CompareOp::Like, value.to_value())
+}
+
+///|
+/// Compare this column against another column (for example the `ON` condition
+/// of a join). Both columns must share the same type.
+pub fn[T] Column::eq_col(self : Column[T], other : Column[T]) -> Condition {
+  Condition::CompareCol(self.reference, CompareOp::Eq, other.reference)
 }
 
 ///|

@@ -18,6 +18,13 @@ pub fn Statement::to_params(self : Statement) -> Array[Value] {
 }
 
 ///|
+/// An inner join: a right-hand table matched against the left on `on`.
+struct Join {
+  table : String
+  on : Condition
+}
+
+///|
 /// Build a `SELECT`.
 pub struct Select {
   table : String
@@ -26,6 +33,7 @@ pub struct Select {
   condition : Condition?
   group_by : Array[ColumnRef]
   having : Condition?
+  join : Join?
   orders : Array[Order]
   limit : Int?
   offset : Int?
@@ -40,6 +48,7 @@ pub fn Select::from(table : String) -> Select {
     condition: None,
     group_by: [],
     having: None,
+    join: None,
     orders: [],
     limit: None,
     offset: None,
@@ -124,8 +133,20 @@ pub fn Select::having(self : Select, condition : Condition) -> Select {
 }
 
 ///|
+/// Inner-join another table on a condition. Columns from either table stay
+/// qualified, so an `on` condition can reference both (for example
+/// `order.user_id.eq(user.id)`).
+pub fn Select::join(self : Select, table : String, on : Condition) -> Select {
+  { ..self, join: Some({ table, on, }), }
+}
+
+///|
 pub fn Select::build(self : Select) -> Statement raise OrmError {
   validate_table(self.table)
+  match self.join {
+    Some(j) => validate_table(j.table)
+    None => ()
+  }
   let cols = if self.group_by.is_empty() {
     match self.aggregate {
       Some(agg) => render_aggregate(agg)
@@ -143,6 +164,7 @@ pub fn Select::build(self : Select) -> Statement raise OrmError {
       None => groups
     }
   }
+  let (join_sql, join_params) = render_join(self.join)
   let (where_sql, where_params) = render_where(self.condition)
   let group_sql = render_group(self.group_by)
   let (having_sql, having_params) = render_having(self.having)
@@ -157,13 +179,14 @@ pub fn Select::build(self : Select) -> Statement raise OrmError {
   }
   {
     sql: "SELECT \{cols} FROM \{quote_ident(self.table)}" +
+    join_sql +
     where_sql +
     group_sql +
     having_sql +
     order_sql +
     limit_sql +
     offset_sql,
-    params: where_params + having_params,
+    params: join_params + where_params + having_params,
   }
 }
 
@@ -309,6 +332,17 @@ fn render_having(having : Condition?) -> (String, Array[Value]) {
 }
 
 ///|
+fn render_join(join : Join?) -> (String, Array[Value]) {
+  match join {
+    None => ("", [])
+    Some(j) => {
+      let (on_sql, on_params) = render_condition(j.on)
+      (" INNER JOIN \{quote_ident(j.table)} ON \{on_sql}", on_params)
+    }
+  }
+}
+
+///|
 fn render_aggregate(agg : Aggregate) -> String {
   match agg {
     Aggregate::CountAll => "COUNT(*)"
@@ -325,6 +359,8 @@ fn render_condition(cond : Condition) -> (String, Array[Value]) {
   match cond {
     Condition::Compare(col, op, value) =>
       (quote_column(col) + " \{op_sql(op)} ?", [value])
+    Condition::CompareCol(left, op, right) =>
+      (quote_column(left) + " \{op_sql(op)} " + quote_column(right), [])
     Condition::In(col, values) =>
       (
         quote_column(col) + " IN (" + values.map(fn(_) { "?" }).join(", ") + ")",

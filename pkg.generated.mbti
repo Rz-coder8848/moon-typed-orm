@@ -38,6 +38,7 @@ pub struct Column[T] {
 pub fn[T] Column::asc(Self[T]) -> Order
 pub fn[T] Column::desc(Self[T]) -> Order
 pub fn[T : ToValue] Column::eq(Self[T], T) -> Condition
+pub fn[T] Column::eq_col(Self[T], Self[T]) -> Condition
 pub fn[T : ToValue] Column::gt(Self[T], T) -> Condition
 pub fn[T : ToValue] Column::gte(Self[T], T) -> Condition
 pub fn[T : ToValue] Column::in_(Self[T], Array[T]) -> Condition
@@ -70,6 +71,7 @@ pub enum CompareOp {
 
 pub enum Condition {
   Compare(ColumnRef, CompareOp, Value)
+  CompareCol(ColumnRef, CompareOp, ColumnRef)
   In(ColumnRef, Array[Value])
   IsNull(ColumnRef)
   IsNotNull(ColumnRef)
@@ -105,6 +107,8 @@ pub fn Insert::build(Self) -> Statement raise OrmError
 pub fn Insert::into(String) -> Self
 pub fn Insert::set(Self, Assignment) -> Self
 
+type Join
+
 pub struct Memory {
   tables : @hashmap.HashMap[String, MemoryTable]
 }
@@ -138,6 +142,7 @@ pub struct Select {
   condition : Condition?
   group_by : Array[ColumnRef]
   having : Condition?
+  join : Join?
   orders : Array[Order]
   limit : Int?
   offset : Int?
@@ -150,6 +155,7 @@ pub fn[T] Select::count_of(Self, Column[T]) -> Self
 pub fn Select::from(String) -> Self
 pub fn[T] Select::group_by(Self, Column[T]) -> Self
 pub fn Select::having(Self, Condition) -> Self
+pub fn Select::join(Self, String, Condition) -> Self
 pub fn Select::limit(Self, Int) -> Self
 pub fn[T] Select::max(Self, Column[T]) -> Self
 pub fn[T] Select::min(Self, Column[T]) -> Self

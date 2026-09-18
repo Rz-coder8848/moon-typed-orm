@@ -200,6 +200,20 @@ test "having renders after group by with raw aggregate" {
 }
 
 ///|
+test "inner join renders on condition with qualified columns" {
+  let users : Column[Int] = Column::new("users", "id")
+  let orders : Column[Int] = Column::new("orders", "user_id")
+  let stmt = try! Select::from("users")
+    .join("orders", orders.eq_col(users))
+    .build()
+  assert_eq(
+    stmt.sql,
+    "SELECT * FROM \"users\" INNER JOIN \"orders\" ON \"orders\".\"user_id\" = \"users\".\"id\"",
+  )
+  assert_true(stmt.params.is_empty())
+}
+
+///|
 test "where and having params concatenate in order" {
   let city : Column[String] = Column::new("users", "city")
   let age : Column[Int] = Column::new("users", "age")
