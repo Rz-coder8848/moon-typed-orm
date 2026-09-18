@@ -154,3 +154,21 @@ test "row get by column name and index" {
   assert_eq(row.get_at(0), Some(Value::Int(1)))
   assert_eq(row.get_at(9), None)
 }
+
+///|
+test "count star renders aggregate" {
+  let stmt = try! Select::from("users").count().build()
+  assert_eq(stmt.sql, "SELECT COUNT(*) FROM \"users\"")
+  assert_true(stmt.params.is_empty())
+}
+
+///|
+test "aggregates render column expressions" {
+  let age : Column[Int] = Column::new("users", "age")
+  let stmt = try! Select::from("users").where_(age.gte(18)).sum(age).build()
+  assert_eq(
+    stmt.sql,
+    "SELECT SUM(\"users\".\"age\") FROM \"users\" WHERE \"users\".\"age\" >= ?",
+  )
+  assert_eq(stmt.params, [Value::Int(18)])
+}

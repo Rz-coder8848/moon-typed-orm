@@ -76,11 +76,21 @@ fn mem_select(mem : Memory, query : Select) -> Array[Row] raise OrmError {
   let filtered = table.rows.filter(fn(row) {
     matches(query.condition, table.columns, row)
   })
-  if !query.orders.is_empty() {
-    filtered.sort_by(fn(a, b) { row_compare(a, b, table.columns, query.orders) })
+  match query.aggregate {
+    Some(agg) => {
+      let value = aggregate_value(agg, table.columns, filtered)
+      [Row::new([aggregate_label(agg)], [value])]
+    }
+    None => {
+      if !query.orders.is_empty() {
+        filtered.sort_by(fn(a, b) {
+          row_compare(a, b, table.columns, query.orders)
+        })
+      }
+      let limited = apply_limit_offset(filtered, query.limit, query.offset)
+      project(limited, table.columns, query.columns)
+    }
   }
-  let limited = apply_limit_offset(filtered, query.limit, query.offset)
-  project(limited, table.columns, query.columns)
 }
 
 ///|
@@ -416,4 +426,135 @@ fn project(
     })
     Row::new(out_cols, vals)
   })
+}
+
+///|
+/// The column label the in-memory backend gives an aggregate result.
+fn aggregate_label(agg : Aggregate) -> String {
+  match agg {
+    Aggregate::CountAll => "count"
+    Aggregate::Count(_) => "count"
+    Aggregate::Sum(_) => "sum"
+    Aggregate::Avg(_) => "avg"
+    Aggregate::Min(_) => "min"
+    Aggregate::Max(_) => "max"
+  }
+}
+
+///|
+/// Evaluate an aggregate over the already-filtered rows.
+fn aggregate_value(
+  agg : Aggregate,
+  columns : Array[String],
+  rows : Array[Array[Value]],
+) -> Value {
+  match agg {
+    Aggregate::CountAll => Value::Int(rows.length())
+    Aggregate::Count(col) =>
+      Value::Int(
+        rows.fold(init=0, fn(acc, row) {
+          match column_value(col, columns, row) {
+            None => acc
+            Some(Value::Null) => acc
+            Some(_) => acc + 1
+          }
+        }),
+      )
+    Aggregate::Sum(col) =>
+      sum_values(rows.map(fn(row) { column_value(col, columns, row) }))
+    Aggregate::Avg(col) =>
+      avg_values(rows.map(fn(row) { column_value(col, columns, row) }))
+    Aggregate::Min(col) =>
+      extreme_value(
+        rows.map(fn(row) { column_value(col, columns, row) }),
+        false,
+      )
+    Aggregate::Max(col) =>
+      extreme_value(rows.map(fn(row) { column_value(col, columns, row) }), true)
+  }
+}
+
+///|
+/// Sum numeric values; non-numeric and `null` values are skipped. Returns
+/// `null` when there is nothing to sum.
+fn sum_values(vals : Array[Value?]) -> Value {
+  let mut int_sum = 0
+  let mut float_sum = 0.0
+  let mut count = 0
+  let mut has_float = false
+  for v in vals {
+    match v {
+      Some(Value::Int(n)) => {
+        int_sum = int_sum + n
+        count = count + 1
+      }
+      Some(Value::Float(f)) => {
+        float_sum = float_sum + f
+        has_float = true
+        count = count + 1
+      }
+      _ => ()
+    }
+  }
+  if count == 0 {
+    Value::Null
+  } else if has_float {
+    Value::Float(float_sum + int_sum.to_double())
+  } else {
+    Value::Int(int_sum)
+  }
+}
+
+///|
+/// Average numeric values; returns a `Float`, or `null` when empty.
+fn avg_values(vals : Array[Value?]) -> Value {
+  let mut sum = 0.0
+  let mut count = 0
+  for v in vals {
+    match v {
+      Some(Value::Int(n)) => {
+        sum = sum + n.to_double()
+        count = count + 1
+      }
+      Some(Value::Float(f)) => {
+        sum = sum + f
+        count = count + 1
+      }
+      _ => ()
+    }
+  }
+  if count == 0 {
+    Value::Null
+  } else {
+    Value::Float(sum / count.to_double())
+  }
+}
+
+///|
+/// The minimum (`want_max == false`) or maximum (`want_max == true`) value,
+/// comparing same-typed values only.
+fn extreme_value(vals : Array[Value?], want_max : Bool) -> Value {
+  let mut best : Value? = None
+  for v in vals {
+    match v {
+      None => ()
+      Some(Value::Null) => ()
+      Some(x) =>
+        match best {
+          None => best = Some(x)
+          Some(b) =>
+            match try_compare(x, b) {
+              None => ()
+              Some(c) =>
+                if (want_max && c > 0) || (!want_max && c < 0) {
+                  best = Some(x)
+                }
+            }
+        }
+    }
+  }
+  match best {
+    None => Value::Null
+    Some(v) => v
+  }
 }

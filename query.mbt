@@ -22,6 +22,7 @@ pub fn Statement::to_params(self : Statement) -> Array[Value] {
 pub struct Select {
   table : String
   columns : Array[ColumnRef]
+  aggregate : Aggregate?
   condition : Condition?
   orders : Array[Order]
   limit : Int?
@@ -33,6 +34,7 @@ pub fn Select::from(table : String) -> Select {
   {
     table,
     columns: [],
+    aggregate: None,
     condition: None,
     orders: [],
     limit: None,
@@ -67,12 +69,52 @@ pub fn Select::offset(self : Select, offset : Int) -> Select {
 }
 
 ///|
+/// Aggregate all rows with `COUNT(*)`.
+pub fn Select::count(self : Select) -> Select {
+  { ..self, aggregate: Some(Aggregate::CountAll), }
+}
+
+///|
+/// Count the non-null values of a column.
+pub fn[T] Select::count_of(self : Select, column : Column[T]) -> Select {
+  { ..self, aggregate: Some(Aggregate::Count(column.to_ref())), }
+}
+
+///|
+/// Sum a numeric column.
+pub fn[T] Select::sum(self : Select, column : Column[T]) -> Select {
+  { ..self, aggregate: Some(Aggregate::Sum(column.to_ref())), }
+}
+
+///|
+/// Average a numeric column.
+pub fn[T] Select::avg(self : Select, column : Column[T]) -> Select {
+  { ..self, aggregate: Some(Aggregate::Avg(column.to_ref())), }
+}
+
+///|
+/// Minimum value of a column.
+pub fn[T] Select::min(self : Select, column : Column[T]) -> Select {
+  { ..self, aggregate: Some(Aggregate::Min(column.to_ref())), }
+}
+
+///|
+/// Maximum value of a column.
+pub fn[T] Select::max(self : Select, column : Column[T]) -> Select {
+  { ..self, aggregate: Some(Aggregate::Max(column.to_ref())), }
+}
+
+///|
 pub fn Select::build(self : Select) -> Statement raise OrmError {
   validate_table(self.table)
-  let cols = if self.columns.is_empty() {
-    "*"
-  } else {
-    join_column_refs(self.columns)
+  let cols = match self.aggregate {
+    Some(agg) => render_aggregate(agg)
+    None =>
+      if self.columns.is_empty() {
+        "*"
+      } else {
+        join_column_refs(self.columns)
+      }
   }
   let (where_sql, where_params) = render_where(self.condition)
   let order_sql = render_order(self.orders)
@@ -214,6 +256,18 @@ fn render_order(orders : Array[Order]) -> String {
     }
   })
   " ORDER BY " + parts.join(", ")
+}
+
+///|
+fn render_aggregate(agg : Aggregate) -> String {
+  match agg {
+    Aggregate::CountAll => "COUNT(*)"
+    Aggregate::Count(col) => "COUNT(\{quote_column(col)})"
+    Aggregate::Sum(col) => "SUM(\{quote_column(col)})"
+    Aggregate::Avg(col) => "AVG(\{quote_column(col)})"
+    Aggregate::Min(col) => "MIN(\{quote_column(col)})"
+    Aggregate::Max(col) => "MAX(\{quote_column(col)})"
+  }
 }
 
 ///|

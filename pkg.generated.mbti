@@ -14,9 +14,19 @@ pub suberror OrmError {
   InvalidQuery(String)
   Backend(String)
 }
+pub fn OrmError::backend(String) -> Self
 pub fn OrmError::message(Self) -> String
 
 // Types and methods
+pub enum Aggregate {
+  CountAll
+  Count(ColumnRef)
+  Sum(ColumnRef)
+  Avg(ColumnRef)
+  Min(ColumnRef)
+  Max(ColumnRef)
+} derive(Eq, @debug.Debug)
+
 pub struct Assignment {
   column : ColumnRef
   value : Value
@@ -124,17 +134,24 @@ pub fn Row::new(Array[String], Array[Value]) -> Self
 pub struct Select {
   table : String
   columns : Array[ColumnRef]
+  aggregate : Aggregate?
   condition : Condition?
   orders : Array[Order]
   limit : Int?
   offset : Int?
 }
+pub fn[T] Select::avg(Self, Column[T]) -> Self
 pub fn Select::build(Self) -> Statement raise OrmError
 pub fn Select::columns(Self, Array[ColumnRef]) -> Self
+pub fn Select::count(Self) -> Self
+pub fn[T] Select::count_of(Self, Column[T]) -> Self
 pub fn Select::from(String) -> Self
 pub fn Select::limit(Self, Int) -> Self
+pub fn[T] Select::max(Self, Column[T]) -> Self
+pub fn[T] Select::min(Self, Column[T]) -> Self
 pub fn Select::offset(Self, Int) -> Self
 pub fn Select::order_by(Self, Order) -> Self
+pub fn[T] Select::sum(Self, Column[T]) -> Self
 pub fn Select::where_(Self, Condition) -> Self
 
 pub struct Statement {
@@ -174,7 +191,7 @@ pub impl ToValue for Value
 // Type aliases
 
 // Traits
-pub trait Connection {
+pub(open) trait Connection {
   fn select(Self, Select) -> Array[Row] raise OrmError
   fn insert(Self, Insert) -> ExecResult raise OrmError
   fn update(Self, Update) -> ExecResult raise OrmError

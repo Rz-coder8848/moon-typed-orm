@@ -100,6 +100,17 @@ pub enum Order {
 } derive(Eq, @debug.Debug)
 
 ///|
+/// An aggregate function over a column, or `COUNT(*)` over all rows.
+pub enum Aggregate {
+  CountAll
+  Count(ColumnRef)
+  Sum(ColumnRef)
+  Avg(ColumnRef)
+  Min(ColumnRef)
+  Max(ColumnRef)
+} derive(Eq, @debug.Debug)
+
+///|
 /// A column assignment used by `INSERT` and `UPDATE`.
 pub struct Assignment {
   column : ColumnRef

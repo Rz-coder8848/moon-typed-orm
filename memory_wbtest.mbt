@@ -125,3 +125,31 @@ test "memory duplicate table raises" {
     _ => panic()
   }
 }
+
+///|
+test "memory aggregates over filtered rows" {
+  let db = Memory::new()
+  try! db.create_table("users", ["id", "age"])
+  let id : Column[Int] = Column::new("users", "id")
+  let age : Column[Int] = Column::new("users", "age")
+  let _ = try! db.insert(Insert::into("users").set(id.set(1)).set(age.set(30)))
+  let _ = try! db.insert(Insert::into("users").set(id.set(2)).set(age.set(17)))
+  let _ = try! db.insert(Insert::into("users").set(id.set(3)).set(age.set(25)))
+
+  let count = try! db.select(Select::from("users").count())
+  assert_eq(count[0].get("count"), Some(Value::int(3)))
+
+  let adult_sum = try! db.select(
+    Select::from("users").where_(age.gte(18)).sum(age),
+  )
+  assert_eq(adult_sum[0].get("sum"), Some(Value::int(55)))
+
+  let avg = try! db.select(Select::from("users").avg(age))
+  assert_eq(avg[0].get("avg"), Some(Value::float(24.0)))
+
+  let min = try! db.select(Select::from("users").min(age))
+  assert_eq(min[0].get("min"), Some(Value::int(17)))
+
+  let max = try! db.select(Select::from("users").max(age))
+  assert_eq(max[0].get("max"), Some(Value::int(30)))
+}
