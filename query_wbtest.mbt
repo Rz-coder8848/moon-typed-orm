@@ -172,3 +172,45 @@ test "aggregates render column expressions" {
   )
   assert_eq(stmt.params, [Value::Int(18)])
 }
+
+///|
+test "group by renders grouping columns and aggregate" {
+  let city : Column[String] = Column::new("users", "city")
+  let stmt = try! Select::from("users").group_by(city).count().build()
+  assert_eq(
+    stmt.sql,
+    "SELECT \"users\".\"city\", COUNT(*) FROM \"users\" GROUP BY \"users\".\"city\"",
+  )
+  assert_true(stmt.params.is_empty())
+}
+
+///|
+test "having renders after group by with raw aggregate" {
+  let city : Column[String] = Column::new("users", "city")
+  let stmt = try! Select::from("users")
+    .group_by(city)
+    .count()
+    .having(Condition::raw("COUNT(*) > 1"))
+    .build()
+  assert_eq(
+    stmt.sql,
+    "SELECT \"users\".\"city\", COUNT(*) FROM \"users\" GROUP BY \"users\".\"city\" HAVING COUNT(*) > 1",
+  )
+  assert_true(stmt.params.is_empty())
+}
+
+///|
+test "where and having params concatenate in order" {
+  let city : Column[String] = Column::new("users", "city")
+  let age : Column[Int] = Column::new("users", "age")
+  let stmt = try! Select::from("users")
+    .where_(age.gt(18))
+    .group_by(city)
+    .having(city.ne(""))
+    .build()
+  assert_eq(
+    stmt.sql,
+    "SELECT \"users\".\"city\" FROM \"users\" WHERE \"users\".\"age\" > ? GROUP BY \"users\".\"city\" HAVING \"users\".\"city\" <> ?",
+  )
+  assert_eq(stmt.params, [Value::Int(18), Value::Text("")])
+}

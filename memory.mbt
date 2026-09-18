@@ -72,24 +72,29 @@ fn get_table(
 ///|
 fn mem_select(mem : Memory, query : Select) -> Array[Row] raise OrmError {
   validate_supported(query.condition)
+  validate_supported(query.having)
   let table = get_table(mem.tables, query.table)
   let filtered = table.rows.filter(fn(row) {
     matches(query.condition, table.columns, row)
   })
-  match query.aggregate {
-    Some(agg) => {
-      let value = aggregate_value(agg, table.columns, filtered)
-      [Row::new([aggregate_label(agg)], [value])]
-    }
-    None => {
-      if !query.orders.is_empty() {
-        filtered.sort_by(fn(a, b) {
-          row_compare(a, b, table.columns, query.orders)
-        })
+  if query.group_by.is_empty() {
+    match query.aggregate {
+      Some(agg) => {
+        let value = aggregate_value(agg, table.columns, filtered)
+        [Row::new([aggregate_label(agg)], [value])]
       }
-      let limited = apply_limit_offset(filtered, query.limit, query.offset)
-      project(limited, table.columns, query.columns)
+      None => {
+        if !query.orders.is_empty() {
+          filtered.sort_by(fn(a, b) {
+            row_compare(a, b, table.columns, query.orders)
+          })
+        }
+        let limited = apply_limit_offset(filtered, query.limit, query.offset)
+        project(limited, table.columns, query.columns)
+      }
     }
+  } else {
+    mem_select_grouped(table, query, filtered)
   }
 }
 
@@ -557,4 +562,90 @@ fn extreme_value(vals : Array[Value?], want_max : Bool) -> Value {
     None => Value::Null
     Some(v) => v
   }
+}
+
+///|
+/// Evaluate a grouped query: rows are bucketed by the grouping columns, then
+/// each bucket collapses into one row (an aggregate over the bucket, or the
+/// distinct grouping key when there is no aggregate).
+fn mem_select_grouped(
+  table : MemoryTable,
+  query : Select,
+  filtered : Array[Array[Value]],
+) -> Array[Row] {
+  let groups = group_rows(filtered, table.columns, query.group_by)
+  let group_cols = query.group_by.map(fn(c) { c.name })
+  let out_cols = match query.aggregate {
+    None => group_cols
+    Some(agg) => group_cols + [aggregate_label(agg)]
+  }
+  let out_rows : Array[Array[Value]] = []
+  for (key, group) in groups {
+    if matches(query.having, group_cols, key) {
+      match query.aggregate {
+        Some(agg) =>
+          out_rows.push(key + [aggregate_value(agg, table.columns, group)])
+        None => out_rows.push(key)
+      }
+    }
+  }
+  if !query.orders.is_empty() {
+    out_rows.sort_by(fn(a, b) { row_compare(a, b, out_cols, query.orders) })
+  }
+  let limited = apply_limit_offset(out_rows, query.limit, query.offset)
+  limited.map(fn(r) { Row::new(out_cols, r) })
+}
+
+///|
+/// Bucket rows by the values of the grouping columns, preserving first-seen
+/// order of each key. Each element is `(key values, the rows in that bucket)`.
+fn group_rows(
+  rows : Array[Array[Value]],
+  columns : Array[String],
+  group_cols : Array[ColumnRef],
+) -> Array[(Array[Value], Array[Array[Value]])] {
+  let groups : Array[(Array[Value], Array[Array[Value]])] = []
+  for row in rows {
+    let key = group_cols.map(fn(c) {
+      match column_value(c, columns, row) {
+        None => Value::Null
+        Some(v) => v
+      }
+    })
+    match find_group_index(groups, key) {
+      Some(i) => {
+        let (k, g) = groups[i]
+        groups[i] = (k, g + [row])
+      }
+      None => groups.push((key, [row]))
+    }
+  }
+  groups
+}
+
+///|
+fn find_group_index(
+  groups : Array[(Array[Value], Array[Array[Value]])],
+  key : Array[Value],
+) -> Int? {
+  for i in 0..<groups.length() {
+    let (k, _) = groups[i]
+    if key_equal(k, key) {
+      return Some(i)
+    }
+  }
+  None
+}
+
+///|
+fn key_equal(a : Array[Value], b : Array[Value]) -> Bool {
+  if a.length() != b.length() {
+    return false
+  }
+  for i in 0..<a.length() {
+    if a[i] != b[i] {
+      return false
+    }
+  }
+  true
 }

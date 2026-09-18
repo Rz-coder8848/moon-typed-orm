@@ -153,3 +153,62 @@ test "memory aggregates over filtered rows" {
   let max = try! db.select(Select::from("users").max(age))
   assert_eq(max[0].get("max"), Some(Value::int(30)))
 }
+
+///|
+test "memory group by with count aggregate" {
+  let db = Memory::new()
+  try! db.create_table("t", ["city", "name"])
+  let city : Column[String] = Column::new("t", "city")
+  let name : Column[String] = Column::new("t", "name")
+  let _ = try! db.insert(
+    Insert::into("t").set(city.set("SF")).set(name.set("a")),
+  )
+  let _ = try! db.insert(
+    Insert::into("t").set(city.set("SF")).set(name.set("b")),
+  )
+  let _ = try! db.insert(
+    Insert::into("t").set(city.set("NY")).set(name.set("c")),
+  )
+  let _ = try! db.insert(
+    Insert::into("t").set(city.set("NY")).set(name.set("d")),
+  )
+  let _ = try! db.insert(
+    Insert::into("t").set(city.set("NY")).set(name.set("e")),
+  )
+
+  let groups = try! db.select(
+    Select::from("t").group_by(city).count().order_by(city.asc()),
+  )
+  assert_eq(groups.length(), 2)
+  assert_eq(groups[0].get("city"), Some(Value::text("NY")))
+  assert_eq(groups[0].get("count"), Some(Value::int(3)))
+  assert_eq(groups[1].get("city"), Some(Value::text("SF")))
+  assert_eq(groups[1].get("count"), Some(Value::int(2)))
+}
+
+///|
+test "memory group by sum with having" {
+  let db = Memory::new()
+  try! db.create_table("t", ["city", "score"])
+  let city : Column[String] = Column::new("t", "city")
+  let score : Column[Int] = Column::new("t", "score")
+  let _ = try! db.insert(
+    Insert::into("t").set(city.set("SF")).set(score.set(1)),
+  )
+  let _ = try! db.insert(
+    Insert::into("t").set(city.set("SF")).set(score.set(2)),
+  )
+  let _ = try! db.insert(
+    Insert::into("t").set(city.set("NY")).set(score.set(10)),
+  )
+  let _ = try! db.insert(
+    Insert::into("t").set(city.set("NY")).set(score.set(20)),
+  )
+
+  let groups = try! db.select(
+    Select::from("t").group_by(city).sum(score).having(city.eq("NY")),
+  )
+  assert_eq(groups.length(), 1)
+  assert_eq(groups[0].get("city"), Some(Value::text("NY")))
+  assert_eq(groups[0].get("sum"), Some(Value::int(30)))
+}

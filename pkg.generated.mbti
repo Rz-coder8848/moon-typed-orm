@@ -136,6 +136,8 @@ pub struct Select {
   columns : Array[ColumnRef]
   aggregate : Aggregate?
   condition : Condition?
+  group_by : Array[ColumnRef]
+  having : Condition?
   orders : Array[Order]
   limit : Int?
   offset : Int?
@@ -146,6 +148,8 @@ pub fn Select::columns(Self, Array[ColumnRef]) -> Self
 pub fn Select::count(Self) -> Self
 pub fn[T] Select::count_of(Self, Column[T]) -> Self
 pub fn Select::from(String) -> Self
+pub fn[T] Select::group_by(Self, Column[T]) -> Self
+pub fn Select::having(Self, Condition) -> Self
 pub fn Select::limit(Self, Int) -> Self
 pub fn[T] Select::max(Self, Column[T]) -> Self
 pub fn[T] Select::min(Self, Column[T]) -> Self

@@ -24,6 +24,8 @@ pub struct Select {
   columns : Array[ColumnRef]
   aggregate : Aggregate?
   condition : Condition?
+  group_by : Array[ColumnRef]
+  having : Condition?
   orders : Array[Order]
   limit : Int?
   offset : Int?
@@ -36,6 +38,8 @@ pub fn Select::from(table : String) -> Select {
     columns: [],
     aggregate: None,
     condition: None,
+    group_by: [],
+    having: None,
     orders: [],
     limit: None,
     offset: None,
@@ -105,18 +109,43 @@ pub fn[T] Select::max(self : Select, column : Column[T]) -> Select {
 }
 
 ///|
+/// Group rows by a column. Repeated calls add more grouping columns; the
+/// selected columns become the grouping columns (plus an aggregate, if any).
+pub fn[T] Select::group_by(self : Select, column : Column[T]) -> Select {
+  { ..self, group_by: self.group_by + [column.to_ref()], }
+}
+
+///|
+/// Filter groups after aggregation. The in-memory backend can only address
+/// grouping columns here; a SQL driver can also use [`Condition::raw`] to
+/// reference an aggregate (for example `Condition::raw("COUNT(*) > 1")`).
+pub fn Select::having(self : Select, condition : Condition) -> Select {
+  { ..self, having: Some(condition), }
+}
+
+///|
 pub fn Select::build(self : Select) -> Statement raise OrmError {
   validate_table(self.table)
-  let cols = match self.aggregate {
-    Some(agg) => render_aggregate(agg)
-    None =>
-      if self.columns.is_empty() {
-        "*"
-      } else {
-        join_column_refs(self.columns)
-      }
+  let cols = if self.group_by.is_empty() {
+    match self.aggregate {
+      Some(agg) => render_aggregate(agg)
+      None =>
+        if self.columns.is_empty() {
+          "*"
+        } else {
+          join_column_refs(self.columns)
+        }
+    }
+  } else {
+    let groups = join_column_refs(self.group_by)
+    match self.aggregate {
+      Some(agg) => "\{groups}, \{render_aggregate(agg)}"
+      None => groups
+    }
   }
   let (where_sql, where_params) = render_where(self.condition)
+  let group_sql = render_group(self.group_by)
+  let (having_sql, having_params) = render_having(self.having)
   let order_sql = render_order(self.orders)
   let limit_sql = match self.limit {
     None => ""
@@ -129,10 +158,12 @@ pub fn Select::build(self : Select) -> Statement raise OrmError {
   {
     sql: "SELECT \{cols} FROM \{quote_ident(self.table)}" +
     where_sql +
+    group_sql +
+    having_sql +
     order_sql +
     limit_sql +
     offset_sql,
-    params: where_params,
+    params: where_params + having_params,
   }
 }
 
@@ -256,6 +287,25 @@ fn render_order(orders : Array[Order]) -> String {
     }
   })
   " ORDER BY " + parts.join(", ")
+}
+
+///|
+fn render_group(group_by : Array[ColumnRef]) -> String {
+  if group_by.is_empty() {
+    return ""
+  }
+  " GROUP BY " + join_column_refs(group_by)
+}
+
+///|
+fn render_having(having : Condition?) -> (String, Array[Value]) {
+  match having {
+    None => ("", [])
+    Some(cond) => {
+      let (sql, params) = render_condition(cond)
+      (" HAVING " + sql, params)
+    }
+  }
 }
 
 ///|
