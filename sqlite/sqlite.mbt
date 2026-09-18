@@ -32,7 +32,10 @@ pub fn Sqlite::close(self : Sqlite) -> Unit {
 
 ///|
 /// Run a raw statement with no bound parameters (DDL, pragmas, etc.).
-pub fn Sqlite::exec(self : Sqlite, sql : String) -> Unit raise @moonorm.OrmError {
+pub fn Sqlite::exec(
+  self : Sqlite,
+  sql : String,
+) -> Unit raise @moonorm.OrmError {
   let _ = self.exec_changes(sql, [])
 }
 
@@ -139,14 +142,14 @@ fn bind_value(stmt : Sqlite3Stmt, idx : Int, value : @moonorm.Value) -> Int {
 fn collect_rows(stmt : Sqlite3Stmt) -> Array[@moonorm.Row] {
   let ncols = sqlite_column_count(stmt)
   let columns : Array[String] = []
-  for i in 0 ..< ncols {
+  for i in 0..<ncols {
     columns.push(decode(sqlite_column_name(stmt, i)))
   }
   let rows : Array[@moonorm.Row] = []
   let mut rc = sqlite_step(stmt)
   while rc == SQLITE_ROW {
     let values : Array[@moonorm.Value] = []
-    for i in 0 ..< ncols {
+    for i in 0..<ncols {
       values.push(read_value(stmt, i))
     }
     rows.push(@moonorm.Row::new(columns, values))

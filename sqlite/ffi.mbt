@@ -66,15 +66,27 @@ extern "C" fn sqlite_finalize(stmt : Sqlite3Stmt) -> Unit = "sqlite_finalize"
 
 ///|
 #borrow(stmt)
-extern "C" fn sqlite_bind_int(stmt : Sqlite3Stmt, idx : Int, value : Int) -> Int = "sqlite_bind_int"
+extern "C" fn sqlite_bind_int(
+  stmt : Sqlite3Stmt,
+  idx : Int,
+  value : Int,
+) -> Int = "sqlite_bind_int"
 
 ///|
 #borrow(stmt)
-extern "C" fn sqlite_bind_double(stmt : Sqlite3Stmt, idx : Int, value : Double) -> Int = "sqlite_bind_double"
+extern "C" fn sqlite_bind_double(
+  stmt : Sqlite3Stmt,
+  idx : Int,
+  value : Double,
+) -> Int = "sqlite_bind_double"
 
 ///|
 #borrow(stmt, text)
-extern "C" fn sqlite_bind_text(stmt : Sqlite3Stmt, idx : Int, text : Bytes) -> Int = "sqlite_bind_text"
+extern "C" fn sqlite_bind_text(
+  stmt : Sqlite3Stmt,
+  idx : Int,
+  text : Bytes,
+) -> Int = "sqlite_bind_text"
 
 ///|
 #borrow(stmt)
@@ -82,7 +94,11 @@ extern "C" fn sqlite_bind_null(stmt : Sqlite3Stmt, idx : Int) -> Int = "sqlite_b
 
 ///|
 #borrow(stmt, blob)
-extern "C" fn sqlite_bind_blob(stmt : Sqlite3Stmt, idx : Int, blob : Bytes) -> Int = "sqlite_bind_blob"
+extern "C" fn sqlite_bind_blob(
+  stmt : Sqlite3Stmt,
+  idx : Int,
+  blob : Bytes,
+) -> Int = "sqlite_bind_blob"
 
 ///|
 #borrow(stmt)

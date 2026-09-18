@@ -13,9 +13,9 @@ test "sqlite :memory: round-trips CRUD through Connection" {
 
   let ins = try! db.insert(
     @moonorm.Insert::into("users")
-      .set(id.set(1))
-      .set(name.set("alice"))
-      .set(age.set(30)),
+    .set(id.set(1))
+    .set(name.set("alice"))
+    .set(age.set(30)),
   )
   assert_eq(ins.rows_affected, 1)
   assert_eq(ins.last_insert_id, Some(1))
@@ -37,9 +37,9 @@ test "sqlite binds null and float, and updates in place" {
 
   let _ = try! db.insert(
     @moonorm.Insert::into("t")
-      .set(id.set(1))
-      .set(note.set("keep"))
-      .set(score.set(1.5)),
+    .set(id.set(1))
+    .set(note.set("keep"))
+    .set(score.set(1.5)),
   )
   let _ = try! db.insert(
     @moonorm.Insert::into("t").set(id.set(2)).set(note.set("drop")),

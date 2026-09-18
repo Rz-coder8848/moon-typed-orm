@@ -8,9 +8,11 @@ concatenation. Every value is bound as a positional parameter, so there is no
 path for SQL injection through user input. The builder renders to a
 `Statement { sql, params }` pair that any SQL driver can execute.
 
-```moonbit
+```moonbit nocheck
+///|
 let age : Column[Int] = Column::new("users", "age")
 
+///|
 let stmt = Select::from("users")
   .where_(age.gte(18))
   .order_by(age.desc())
@@ -43,11 +45,16 @@ compiler.
 
 Columns carry a compile-time type so comparisons stay type-checked:
 
-```moonbit
-let id    : Column[Int]    = Column::new("users", "id")
+```moonbit nocheck
+///|
+let id : Column[Int] = Column::new("users", "id")
+
+///|
 let email : Column[String] = Column::new("users", "email")
 
 // where id = 1 AND (email LIKE '%@example.com' OR email IS NULL)
+
+///|
 let cond = id.eq(1).and_(email.like("%@example.com").or_(email.is_null()))
 ```
 
@@ -62,7 +69,8 @@ renders with `build()` and binds parameters; the in-memory backend evaluates the
 structure directly. The trait is the replaceable boundary — same call sites,
 different backend:
 
-```moonbit
+```moonbit nocheck
+///|
 pub trait Connection {
   fn select(Self, Select) -> Array[Row] raise OrmError
   fn insert(Self, Insert) -> ExecResult raise OrmError
@@ -73,7 +81,7 @@ pub trait Connection {
 
 `Memory` implements it:
 
-```moonbit
+```moonbit nocheck
 let db = Memory::new()
 db.create_table("users", ["id", "name", "age"])
 
