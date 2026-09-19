@@ -1,7 +1,8 @@
 # MoonORM
 
 A typed, injection-safe SQL query builder for MoonBit, with a pluggable
-connection boundary and a dependency-free in-memory backend.
+connection boundary and two backends: a dependency-free in-memory store and a
+native SQLite driver.
 
 SQL is built through a small DSL of typed columns instead of string
 concatenation. Every value is bound as a positional parameter, so there is no
@@ -25,21 +26,27 @@ let stmt = Select::from("users")
 ## What's here
 
 - `ast.mbt` — the DSL: `Column`, `Condition`, `Order`, `Assignment`.
-- `query.mbt` — `Select` / `Insert` / `Update` / `Delete` builders and `Statement`.
+- `query.mbt` — `Select` / `Insert` / `Update` / `Delete` builders and `Statement`,
+  plus aggregates (`COUNT` / `SUM` / `AVG` / `MIN` / `MAX`), `GROUP BY` / `HAVING`,
+  and `INNER JOIN`.
 - `conn.mbt` — `Row`, `ExecResult`, and the `Connection` trait.
 - `memory.mbt` — an in-memory `Connection` implementation (no FFI, no deps).
 - `error.mbt` — `OrmError`.
+- `sqlite/` — a native SQLite `Connection` over a vendored SQLite amalgamation.
 
 ## Running
 
 ```sh
-moon test          # 21 tests: SQL rendering, error cases, in-memory CRUD
-moon run cmd/main  # end-to-end demo: build → execute → rows
+moon test                    # 31 tests on wasm-gc: SQL rendering, errors, in-memory CRUD
+moon test --target native    # + 2 SQLite round-trip tests (needs a C toolchain)
+moon run cmd/main            # end-to-end demo: build -> execute -> rows
 ```
 
-There are no external dependencies beyond the MoonBit core library. The in-memory
-backend runs on the wasm-gc target, so the demo needs no database and no C
-compiler.
+The core library has no external dependencies beyond the MoonBit core library.
+The in-memory backend runs on the wasm-gc target, so the demo needs no database
+and no C compiler. The SQLite driver targets the native backend, needs a C
+toolchain, and vendors the SQLite amalgamation so there is no system `sqlite3`
+to install.
 
 ## The DSL
 
@@ -62,6 +69,28 @@ Conditions combine with `and_` / `or_` / `not_` (the bare `and` / `or` / `not`
 are MoonBit keywords). `Condition::raw(sql)` is an escape hatch for operators
 the DSL doesn't model; the in-memory backend rejects it.
 
+Aggregation and joins are first-class too:
+
+```moonbit nocheck
+///|
+let stmt = Select::from("orders")
+  .group_by(Column::new("orders", "status"))
+  .count()
+  .build()
+// SELECT "orders"."status", COUNT(*) FROM "orders" GROUP BY "orders"."status"
+```
+
+```moonbit nocheck
+///|
+let user_id : Column[Int] = Column::new("orders", "user_id")
+
+///|
+let stmt = Select::from("orders")
+  .join("users", user_id.eq(Column::new("users", "id")))
+  .build()
+// SELECT * FROM "orders" INNER JOIN "users" ON "orders"."user_id" = "users"."id"
+```
+
 ## The `Connection` boundary
 
 Builders hand structured queries to a backend, not SQL strings. A SQL driver
@@ -71,7 +100,7 @@ different backend:
 
 ```moonbit nocheck
 ///|
-pub trait Connection {
+pub(open) trait Connection {
   fn select(Self, Select) -> Array[Row] raise OrmError
   fn insert(Self, Insert) -> ExecResult raise OrmError
   fn update(Self, Update) -> ExecResult raise OrmError
@@ -84,6 +113,17 @@ pub trait Connection {
 ```moonbit nocheck
 let db = Memory::new()
 db.create_table("users", ["id", "name", "age"])
+
+db.insert(Insert::into("users").set(id.set(1)).set(name.set("alice")).set(age.set(30)))
+
+let rows = db.select(Select::from("users").where_(age.gte(18)))
+```
+
+`Sqlite` (native target) implements the same trait:
+
+```moonbit nocheck
+let db = Sqlite::open(":memory:")
+db.exec("CREATE TABLE users (id INTEGER, name TEXT, age INTEGER)")
 
 db.insert(Insert::into("users").set(id.set(1)).set(name.set("alice")).set(age.set(30)))
 
@@ -105,10 +145,10 @@ let rows = db.select(Select::from("users").where_(age.gte(18)))
 
 ## Limits
 
-- Single-table queries. No `JOIN`, no subqueries, no `GROUP BY`.
-- One backend (`Memory`). A SQLite or Postgres driver is the natural next step;
-  it would implement `Connection` by calling `build()` and binding `params`.
+- One `INNER JOIN` per `SELECT`; no subqueries, no `LEFT` / `RIGHT` / `FULL` joins.
+- No transactions; each statement runs on its own.
 - `Condition::raw` works for SQL rendering but is rejected by `Memory`.
+- The SQLite driver is native-only (not available on wasm-gc).
 
 ## License
 
