@@ -18,10 +18,12 @@ pub fn Statement::to_params(self : Statement) -> Array[Value] {
 }
 
 ///|
-/// An inner join: a right-hand table matched against the left on `on`.
+/// A join: a right-hand table matched against the left on `on`, of a given
+/// [`JoinKind`].
 struct Join {
   table : String
   on : Condition
+  kind : JoinKind
 }
 
 ///|
@@ -137,7 +139,21 @@ pub fn Select::having(self : Select, condition : Condition) -> Select {
 /// qualified, so an `on` condition can reference both (for example
 /// `order.user_id.eq(user.id)`).
 pub fn Select::join(self : Select, table : String, on : Condition) -> Select {
-  { ..self, join: Some({ table, on, }), }
+  { ..self, join: Some({ table, on, kind: JoinKind::Inner, }), }
+}
+
+///|
+/// Left-join another table on a condition. Rows from the left table are kept
+/// even when no row on the right matches (right-hand columns become null).
+pub fn Select::left_join(self : Select, table : String, on : Condition) -> Select {
+  { ..self, join: Some({ table, on, kind: JoinKind::Left, }), }
+}
+
+///|
+/// Right-join another table on a condition. Rows from the right table are kept
+/// even when no row on the left matches (left-hand columns become null).
+pub fn Select::right_join(self : Select, table : String, on : Condition) -> Select {
+  { ..self, join: Some({ table, on, kind: JoinKind::Right, }), }
 }
 
 ///|
@@ -337,8 +353,17 @@ fn render_join(join : Join?) -> (String, Array[Value]) {
     None => ("", [])
     Some(j) => {
       let (on_sql, on_params) = render_condition(j.on)
-      (" INNER JOIN \{quote_ident(j.table)} ON \{on_sql}", on_params)
+      (render_join_kind(j.kind) + " \{quote_ident(j.table)} ON \{on_sql}", on_params)
     }
+  }
+}
+
+///|
+fn render_join_kind(kind : JoinKind) -> String {
+  match kind {
+    JoinKind::Inner => " INNER JOIN"
+    JoinKind::Left => " LEFT JOIN"
+    JoinKind::Right => " RIGHT JOIN"
   }
 }
 

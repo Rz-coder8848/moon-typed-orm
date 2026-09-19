@@ -235,6 +235,24 @@ test "memory inner join round trip" {
 }
 
 ///|
+test "memory left join is not supported yet" {
+  let db = Memory::new()
+  try! db.create_table("users", ["id"])
+  try! db.create_table("orders", ["user_id"])
+  let users : Column[Int] = Column::new("users", "id")
+  let orders : Column[Int] = Column::new("orders", "user_id")
+  try {
+    let _ = db.select(
+      Select::from("users").left_join("orders", orders.eq_col(users)),
+    )
+    panic()
+  } catch {
+    OrmError::Backend(_) => ()
+    _ => panic()
+  }
+}
+
+///|
 test "memory group by sum with having" {
   let db = Memory::new()
   try! db.create_table("t", ["city", "score"])

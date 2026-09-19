@@ -214,6 +214,26 @@ test "inner join renders on condition with qualified columns" {
 }
 
 ///|
+test "left and right join render their keywords" {
+  let users : Column[Int] = Column::new("users", "id")
+  let orders : Column[Int] = Column::new("orders", "user_id")
+  let left = try! Select::from("users")
+    .left_join("orders", orders.eq_col(users))
+    .build()
+  assert_eq(
+    left.sql,
+    "SELECT * FROM \"users\" LEFT JOIN \"orders\" ON \"orders\".\"user_id\" = \"users\".\"id\"",
+  )
+  let right = try! Select::from("users")
+    .right_join("orders", orders.eq_col(users))
+    .build()
+  assert_eq(
+    right.sql,
+    "SELECT * FROM \"users\" RIGHT JOIN \"orders\" ON \"orders\".\"user_id\" = \"users\".\"id\"",
+  )
+}
+
+///|
 test "where and having params concatenate in order" {
   let city : Column[String] = Column::new("users", "city")
   let age : Column[Int] = Column::new("users", "age")

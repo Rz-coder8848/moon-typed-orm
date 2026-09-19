@@ -28,18 +28,21 @@ let stmt = Select::from("users")
 - `ast.mbt` — the DSL: `Column`, `Condition`, `Order`, `Assignment`.
 - `query.mbt` — `Select` / `Insert` / `Update` / `Delete` builders and `Statement`,
   plus aggregates (`COUNT` / `SUM` / `AVG` / `MIN` / `MAX`), `GROUP BY` / `HAVING`,
-  and `INNER JOIN`.
-- `conn.mbt` — `Row`, `ExecResult`, and the `Connection` trait.
+  and `INNER` / `LEFT` / `RIGHT JOIN`.
+- `conn.mbt` — `Row`, `ExecResult`, and the `Connection` / `Transactional` traits.
 - `memory.mbt` — an in-memory `Connection` implementation (no FFI, no deps).
 - `error.mbt` — `OrmError`.
 - `sqlite/` — a native SQLite `Connection` over a vendored SQLite amalgamation.
+- `cmd/main` / `cmd/sqlite_demo` — runnable demos of the same builders against
+  the in-memory backend and against SQLite.
 
 ## Running
 
 ```sh
-moon test                    # 31 tests on wasm-gc: SQL rendering, errors, in-memory CRUD
-moon test --target native    # + 2 SQLite round-trip tests (needs a C toolchain)
-moon run cmd/main            # end-to-end demo: build -> execute -> rows
+moon test                    # 33 tests on wasm-gc: SQL rendering, errors, in-memory CRUD
+moon test --target native    # + 3 SQLite tests (CRUD, null/float, transactions)
+moon run cmd/main            # in-memory demo: build -> execute -> rows
+moon run cmd/sqlite_demo --target native  # the same demo against SQLite
 ```
 
 The core library has no external dependencies beyond the MoonBit core library.
@@ -86,9 +89,10 @@ let user_id : Column[Int] = Column::new("orders", "user_id")
 
 ///|
 let stmt = Select::from("orders")
-  .join("users", user_id.eq(Column::new("users", "id")))
+  .left_join("users", user_id.eq(Column::new("users", "id")))
   .build()
-// SELECT * FROM "orders" INNER JOIN "users" ON "orders"."user_id" = "users"."id"
+// SELECT * FROM "orders" LEFT JOIN "users" ON "orders"."user_id" = "users"."id"
+// `.join` is the inner join and `.right_join` exists too.
 ```
 
 ## The `Connection` boundary
@@ -130,6 +134,23 @@ db.insert(Insert::into("users").set(id.set(1)).set(name.set("alice")).set(age.se
 let rows = db.select(Select::from("users").where_(age.gte(18)))
 ```
 
+Transactions are an optional capability, not part of `Connection`. A backend
+implements `Transactional` only if it can run multi-statement transactions:
+
+```moonbit nocheck
+///|
+pub(open) trait Transactional {
+  fn begin(Self) -> Unit raise OrmError
+  fn commit(Self) -> Unit raise OrmError
+  fn rollback(Self) -> Unit raise OrmError
+}
+```
+
+`Sqlite` implements it (`BEGIN` / `COMMIT` / `ROLLBACK`); `Memory` does not. The
+two demos show the boundary side by side: `cmd/main` runs on `Memory`, while
+`cmd/sqlite_demo` runs the same builders on `Sqlite` and wraps seeding in a
+transaction.
+
 ## Design notes
 
 - **Parameterized SQL.** Values are never interpolated into the text. The
@@ -145,8 +166,10 @@ let rows = db.select(Select::from("users").where_(age.gte(18)))
 
 ## Limits
 
-- One `INNER JOIN` per `SELECT`; no subqueries, no `LEFT` / `RIGHT` / `FULL` joins.
-- No transactions; each statement runs on its own.
+- One join per `SELECT` (`INNER` / `LEFT` / `RIGHT`); no subqueries, no `FULL`
+  join. The in-memory backend only evaluates `INNER JOIN` and rejects the rest.
+- Transactions are opt-in via `Transactional`: `Sqlite` implements it, `Memory`
+  does not.
 - `Condition::raw` works for SQL rendering but is rejected by `Memory`.
 - The SQLite driver is native-only (not available on wasm-gc).
 

@@ -59,3 +59,31 @@ test "sqlite binds null and float, and updates in place" {
   assert_eq(left.length(), 1)
   assert_eq(left[0].get("note"), Some(@moonorm.Value::text("changed")))
 }
+
+///|
+test "sqlite transactions commit and roll back" {
+  let db = try! Sqlite::open(":memory:")
+  try! db.exec("CREATE TABLE t (id INTEGER, name TEXT)")
+
+  let id : @moonorm.Column[Int] = @moonorm.Column::new("t", "id")
+  let name : @moonorm.Column[String] = @moonorm.Column::new("t", "name")
+
+  // Rolled-back inserts are discarded.
+  try! db.begin()
+  let _ = try! db.insert(
+    @moonorm.Insert::into("t").set(id.set(1)).set(name.set("a")),
+  )
+  try! db.rollback()
+  let empty = try! db.select(@moonorm.Select::from("t"))
+  assert_eq(empty.length(), 0)
+
+  // Committed inserts persist.
+  try! db.begin()
+  let _ = try! db.insert(
+    @moonorm.Insert::into("t").set(id.set(1)).set(name.set("a")),
+  )
+  try! db.commit()
+  let one = try! db.select(@moonorm.Select::from("t"))
+  assert_eq(one.length(), 1)
+  assert_eq(one[0].get("name"), Some(@moonorm.Value::text("a")))
+}

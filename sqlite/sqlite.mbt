@@ -124,6 +124,27 @@ pub impl @moonorm.Connection for Sqlite with fn delete(
 pub extend Sqlite with @moonorm.Connection::{select, insert, update, delete}
 
 ///|
+/// `Sqlite` supports explicit transactions over the same connection.
+pub impl @moonorm.Transactional for Sqlite with fn begin(self : Sqlite) -> Unit raise @moonorm.OrmError {
+  self.exec("BEGIN")
+}
+
+///|
+pub impl @moonorm.Transactional for Sqlite with fn commit(self : Sqlite) -> Unit raise @moonorm.OrmError {
+  self.exec("COMMIT")
+}
+
+///|
+pub impl @moonorm.Transactional for Sqlite with fn rollback(self : Sqlite) -> Unit raise @moonorm.OrmError {
+  self.exec("ROLLBACK")
+}
+
+///|
+/// Make the transaction methods callable directly as `db.begin()`, `db.commit()`,
+/// and `db.rollback()`.
+pub extend Sqlite with @moonorm.Transactional::{begin, commit, rollback}
+
+///|
 /// Translate a [`Value`] into the matching `sqlite3_bind_*` call. Returns the
 /// SQLite result code (0 = OK).
 fn bind_value(stmt : Sqlite3Stmt, idx : Int, value : @moonorm.Value) -> Int {

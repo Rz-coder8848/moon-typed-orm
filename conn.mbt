@@ -52,3 +52,14 @@ pub(open) trait Connection {
   fn update(Self, Update) -> ExecResult raise OrmError
   fn delete(Self, Delete) -> ExecResult raise OrmError
 }
+
+///|
+/// A connection that can run explicit transactions. Backends that don't support
+/// multi-statement transactions (for example a single-statement in-memory store)
+/// simply don't implement this trait — capabilities are opt-in, and
+/// [`Connection`] stays the narrow boundary every backend shares.
+pub(open) trait Transactional {
+  fn begin(Self) -> Unit raise OrmError
+  fn commit(Self) -> Unit raise OrmError
+  fn rollback(Self) -> Unit raise OrmError
+}

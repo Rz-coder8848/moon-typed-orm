@@ -112,6 +112,14 @@ pub enum Aggregate {
 } derive(Eq, @debug.Debug)
 
 ///|
+/// The kind of a join clause.
+pub enum JoinKind {
+  Inner
+  Left
+  Right
+} derive(Eq, @debug.Debug)
+
+///|
 /// A column assignment used by `INSERT` and `UPDATE`.
 pub struct Assignment {
   column : ColumnRef

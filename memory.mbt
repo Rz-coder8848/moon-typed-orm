@@ -99,7 +99,20 @@ fn mem_select(mem : Memory, query : Select) -> Array[Row] raise OrmError {
   validate_supported(query.condition)
   validate_supported(query.having)
   match query.join {
-    Some(j) => validate_supported(Some(j.on))
+    Some(j) => {
+      validate_supported(Some(j.on))
+      match j.kind {
+        JoinKind::Inner => ()
+        JoinKind::Left =>
+          raise OrmError::Backend(
+            "LEFT JOIN is not supported by the in-memory backend",
+          )
+        JoinKind::Right =>
+          raise OrmError::Backend(
+            "RIGHT JOIN is not supported by the in-memory backend",
+          )
+      }
+    }
     None => ()
   }
   let (columns, rows) = match query.join {
