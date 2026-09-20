@@ -262,6 +262,17 @@ fn eval_condition(
         (Some(a), Some(b)) => compare_values(a, op, b)
         _ => false
       }
+    Condition::CompareSub(col, op, sub) => {
+      let sub_rows = mem_select(mem, sub)
+      match sub_rows.get(0) {
+        None => false
+        Some(r) =>
+          match (column_value(col, columns, row), r.get_at(0)) {
+            (Some(actual), Some(scalar)) => compare_values(actual, op, scalar)
+            _ => false
+          }
+      }
+    }
     Condition::In(col, values) =>
       match column_value(col, columns, row) {
         None => false
@@ -376,6 +387,8 @@ fn try_compare(a : Value, b : Value) -> Int? {
   match (a, b) {
     (Value::Int(x), Value::Int(y)) => Some(cmp_int(x, y))
     (Value::Float(x), Value::Float(y)) => Some(cmp_double(x, y))
+    (Value::Int(x), Value::Float(y)) => Some(cmp_double(x.to_double(), y))
+    (Value::Float(x), Value::Int(y)) => Some(cmp_double(x, y.to_double()))
     (Value::Text(x), Value::Text(y)) => Some(x.compare(y))
     (Value::Bool(x), Value::Bool(y)) =>
       Some(if x == y { 0 } else if x { 1 } else { -1 })

@@ -409,3 +409,36 @@ test "memory exists subquery is a global gate" {
   )
   assert_eq(miss.length(), 0)
 }
+
+///|
+test "memory scalar subquery compares against a single value" {
+  let db = Memory::new()
+  try! db.create_table("users", ["id", "age"])
+  let id : Column[Int] = Column::new("users", "id")
+  let age : Column[Int] = Column::new("users", "age")
+  let _ = try! db.insert(Insert::into("users").set(id.set(1)).set(age.set(30)))
+  let _ = try! db.insert(Insert::into("users").set(id.set(2)).set(age.set(20)))
+  let _ = try! db.insert(Insert::into("users").set(id.set(3)).set(age.set(10)))
+
+  let above = try! db.select(
+    Select::from("users").where_(age.gt_sub(Select::from("users").avg(age))),
+  )
+  assert_eq(above.length(), 1)
+  assert_eq(above[0].get("age"), Some(Value::Int(30)))
+}
+
+///|
+test "memory scalar subquery over no rows compares false" {
+  let db = Memory::new()
+  try! db.create_table("users", ["id", "age"])
+  try! db.create_table("orders", ["id", "amount"])
+  let id : Column[Int] = Column::new("users", "id")
+  let age : Column[Int] = Column::new("users", "age")
+  let amount : Column[Int] = Column::new("orders", "amount")
+  let _ = try! db.insert(Insert::into("users").set(id.set(1)).set(age.set(5)))
+
+  // `orders` is empty, so the scalar subquery yields no rows -> comparison false.
+  let sub = Select::from("orders").columns([amount.to_ref()])
+  let rows = try! db.select(Select::from("users").where_(age.eq_sub(sub)))
+  assert_eq(rows.length(), 0)
+}

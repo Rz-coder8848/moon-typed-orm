@@ -298,3 +298,15 @@ test "not exists renders via not_" {
   )
   assert_true(stmt.params.is_empty())
 }
+
+///|
+test "scalar subquery renders comparison" {
+  let age : Column[Int] = Column::new("users", "age")
+  let sub = Select::from("users").avg(age)
+  let stmt = try! Select::from("users").where_(age.gt_sub(sub)).build()
+  assert_eq(
+    stmt.sql,
+    "SELECT * FROM \"users\" WHERE \"users\".\"age\" > (SELECT AVG(\"users\".\"age\") FROM \"users\")",
+  )
+  assert_true(stmt.params.is_empty())
+}

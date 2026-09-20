@@ -59,6 +59,7 @@ pub enum CompareOp {
 pub enum Condition {
   Compare(ColumnRef, CompareOp, Value)
   CompareCol(ColumnRef, CompareOp, ColumnRef)
+  CompareSub(ColumnRef, CompareOp, Select)
   In(ColumnRef, Array[Value])
   InSelect(ColumnRef, Select)
   IsNull(ColumnRef)
@@ -177,6 +178,42 @@ pub fn[T : ToValue] Column::like(self : Column[T], value : T) -> Condition {
 /// of a join). Both columns must share the same type.
 pub fn[T] Column::eq_col(self : Column[T], other : Column[T]) -> Condition {
   Condition::CompareCol(self.reference, CompareOp::Eq, other.reference)
+}
+
+///|
+/// Compare this column against a scalar subquery (`col = (SELECT ...)`).
+pub fn[T] Column::eq_sub(self : Column[T], sub : Select) -> Condition {
+  Condition::CompareSub(self.reference, CompareOp::Eq, sub)
+}
+
+///|
+/// Compare this column against a scalar subquery (`col <> (SELECT ...)`).
+pub fn[T] Column::ne_sub(self : Column[T], sub : Select) -> Condition {
+  Condition::CompareSub(self.reference, CompareOp::Ne, sub)
+}
+
+///|
+/// Compare this column against a scalar subquery (`col > (SELECT ...)`).
+pub fn[T] Column::gt_sub(self : Column[T], sub : Select) -> Condition {
+  Condition::CompareSub(self.reference, CompareOp::Gt, sub)
+}
+
+///|
+/// Compare this column against a scalar subquery (`col >= (SELECT ...)`).
+pub fn[T] Column::gte_sub(self : Column[T], sub : Select) -> Condition {
+  Condition::CompareSub(self.reference, CompareOp::Gte, sub)
+}
+
+///|
+/// Compare this column against a scalar subquery (`col < (SELECT ...)`).
+pub fn[T] Column::lt_sub(self : Column[T], sub : Select) -> Condition {
+  Condition::CompareSub(self.reference, CompareOp::Lt, sub)
+}
+
+///|
+/// Compare this column against a scalar subquery (`col <= (SELECT ...)`).
+pub fn[T] Column::lte_sub(self : Column[T], sub : Select) -> Condition {
+  Condition::CompareSub(self.reference, CompareOp::Lte, sub)
 }
 
 ///|

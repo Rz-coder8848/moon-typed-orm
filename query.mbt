@@ -394,6 +394,10 @@ fn render_condition(cond : Condition) -> (String, Array[Value]) raise OrmError {
       (quote_column(col) + " \{op_sql(op)} ?", [value])
     Condition::CompareCol(left, op, right) =>
       (quote_column(left) + " \{op_sql(op)} " + quote_column(right), [])
+    Condition::CompareSub(col, op, sub) => {
+      let stmt = sub.build()
+      (quote_column(col) + " \{op_sql(op)} (" + stmt.sql + ")", stmt.params)
+    }
     Condition::In(col, values) =>
       (
         quote_column(col) + " IN (" + values.map(fn(_) { "?" }).join(", ") + ")",
