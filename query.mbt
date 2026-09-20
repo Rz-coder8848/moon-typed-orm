@@ -157,6 +157,13 @@ pub fn Select::right_join(self : Select, table : String, on : Condition) -> Sele
 }
 
 ///|
+/// Full-join another table on a condition. Rows from either side are kept even
+/// when no row on the other side matches (the missing side becomes null).
+pub fn Select::full_join(self : Select, table : String, on : Condition) -> Select {
+  { ..self, join: Some({ table, on, kind: JoinKind::Full, }), }
+}
+
+///|
 pub fn Select::build(self : Select) -> Statement raise OrmError {
   validate_table(self.table)
   match self.join {
@@ -364,6 +371,7 @@ fn render_join_kind(kind : JoinKind) -> String {
     JoinKind::Inner => " INNER JOIN"
     JoinKind::Left => " LEFT JOIN"
     JoinKind::Right => " RIGHT JOIN"
+    JoinKind::Full => " FULL JOIN"
   }
 }
 

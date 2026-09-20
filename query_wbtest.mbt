@@ -234,6 +234,19 @@ test "left and right join render their keywords" {
 }
 
 ///|
+test "full join renders its keyword" {
+  let users : Column[Int] = Column::new("users", "id")
+  let orders : Column[Int] = Column::new("orders", "user_id")
+  let stmt = try! Select::from("users")
+    .full_join("orders", orders.eq_col(users))
+    .build()
+  assert_eq(
+    stmt.sql,
+    "SELECT * FROM \"users\" FULL JOIN \"orders\" ON \"orders\".\"user_id\" = \"users\".\"id\"",
+  )
+}
+
+///|
 test "where and having params concatenate in order" {
   let city : Column[String] = Column::new("users", "city")
   let age : Column[Int] = Column::new("users", "age")

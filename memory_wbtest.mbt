@@ -235,21 +235,99 @@ test "memory inner join round trip" {
 }
 
 ///|
-test "memory left join is not supported yet" {
+test "memory left join keeps unmatched left rows" {
   let db = Memory::new()
-  try! db.create_table("users", ["id"])
-  try! db.create_table("orders", ["user_id"])
-  let users : Column[Int] = Column::new("users", "id")
-  let orders : Column[Int] = Column::new("orders", "user_id")
-  try {
-    let _ = db.select(
-      Select::from("users").left_join("orders", orders.eq_col(users)),
-    )
-    panic()
-  } catch {
-    OrmError::Backend(_) => ()
-    _ => panic()
-  }
+  try! db.create_table("users", ["id", "name"])
+  try! db.create_table("orders", ["id", "user_id", "item"])
+  let uid : Column[Int] = Column::new("users", "id")
+  let uname : Column[String] = Column::new("users", "name")
+  let oid : Column[Int] = Column::new("orders", "id")
+  let ouid : Column[Int] = Column::new("orders", "user_id")
+  let item : Column[String] = Column::new("orders", "item")
+
+  let _ = try! db.insert(Insert::into("users").set(uid.set(1)).set(uname.set("alice")))
+  let _ = try! db.insert(Insert::into("users").set(uid.set(2)).set(uname.set("bob")))
+  let _ = try! db.insert(
+    Insert::into("orders").set(oid.set(100)).set(ouid.set(1)).set(item.set("book")),
+  )
+
+  let rows = try! db.select(
+    Select::from("users").left_join("orders", ouid.eq_col(uid)),
+  )
+  assert_eq(rows.length(), 2)
+  // alice matches order 100.
+  assert_eq(rows[0].get("users.name"), Some(Value::Text("alice")))
+  assert_eq(rows[0].get("orders.item"), Some(Value::Text("book")))
+  // bob has no order: right-hand columns are null.
+  assert_eq(rows[1].get("users.name"), Some(Value::Text("bob")))
+  assert_eq(rows[1].get("orders.id"), Some(Value::Null))
+  assert_eq(rows[1].get("orders.item"), Some(Value::Null))
+}
+
+///|
+test "memory right join keeps unmatched right rows" {
+  let db = Memory::new()
+  try! db.create_table("users", ["id", "name"])
+  try! db.create_table("orders", ["id", "user_id", "item"])
+  let uid : Column[Int] = Column::new("users", "id")
+  let uname : Column[String] = Column::new("users", "name")
+  let oid : Column[Int] = Column::new("orders", "id")
+  let ouid : Column[Int] = Column::new("orders", "user_id")
+  let item : Column[String] = Column::new("orders", "item")
+
+  let _ = try! db.insert(Insert::into("users").set(uid.set(1)).set(uname.set("alice")))
+  let _ = try! db.insert(
+    Insert::into("orders").set(oid.set(100)).set(ouid.set(1)).set(item.set("book")),
+  )
+  let _ = try! db.insert(
+    Insert::into("orders").set(oid.set(101)).set(ouid.set(2)).set(item.set("cup")),
+  )
+
+  let rows = try! db.select(
+    Select::from("users").right_join("orders", ouid.eq_col(uid)),
+  )
+  assert_eq(rows.length(), 2)
+  // order 100 matches alice.
+  assert_eq(rows[0].get("users.name"), Some(Value::Text("alice")))
+  assert_eq(rows[0].get("orders.item"), Some(Value::Text("book")))
+  // order 101 has no user: left-hand columns are null.
+  assert_eq(rows[1].get("users.id"), Some(Value::Null))
+  assert_eq(rows[1].get("orders.item"), Some(Value::Text("cup")))
+}
+
+///|
+test "memory full join keeps unmatched rows on both sides" {
+  let db = Memory::new()
+  try! db.create_table("users", ["id", "name"])
+  try! db.create_table("orders", ["id", "user_id", "item"])
+  let uid : Column[Int] = Column::new("users", "id")
+  let uname : Column[String] = Column::new("users", "name")
+  let oid : Column[Int] = Column::new("orders", "id")
+  let ouid : Column[Int] = Column::new("orders", "user_id")
+  let item : Column[String] = Column::new("orders", "item")
+
+  let _ = try! db.insert(Insert::into("users").set(uid.set(1)).set(uname.set("alice")))
+  let _ = try! db.insert(Insert::into("users").set(uid.set(2)).set(uname.set("bob")))
+  let _ = try! db.insert(
+    Insert::into("orders").set(oid.set(100)).set(ouid.set(1)).set(item.set("book")),
+  )
+  let _ = try! db.insert(
+    Insert::into("orders").set(oid.set(101)).set(ouid.set(3)).set(item.set("cup")),
+  )
+
+  let rows = try! db.select(
+    Select::from("users").full_join("orders", ouid.eq_col(uid)),
+  )
+  assert_eq(rows.length(), 3)
+  // matched pair.
+  assert_eq(rows[0].get("users.name"), Some(Value::Text("alice")))
+  assert_eq(rows[0].get("orders.item"), Some(Value::Text("book")))
+  // bob has no order.
+  assert_eq(rows[1].get("users.name"), Some(Value::Text("bob")))
+  assert_eq(rows[1].get("orders.id"), Some(Value::Null))
+  // order 101 has no user.
+  assert_eq(rows[2].get("users.id"), Some(Value::Null))
+  assert_eq(rows[2].get("orders.item"), Some(Value::Text("cup")))
 }
 
 ///|

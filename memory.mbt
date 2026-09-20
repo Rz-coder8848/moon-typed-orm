@@ -70,9 +70,10 @@ fn get_table(
 }
 
 ///|
-/// Inner-join two tables by nesting loops over their rows and keeping the
-/// combinations that satisfy `join.on`. Column names are qualified with their
-/// table so columns from either side stay addressable.
+/// Join two tables by `join.on`, honoring `join.kind`. Column names are
+/// qualified with their table so columns from either side stay addressable.
+/// `INNER` keeps only matching pairs; `LEFT` / `RIGHT` keep unmatched rows from
+/// one side (the other side's columns become null); `FULL` keeps both.
 fn join_rows(
   mem : Memory,
   left_table : String,
@@ -82,16 +83,65 @@ fn join_rows(
   let right = get_table(mem.tables, join.table)
   let columns = left.columns.map(fn(c) { left_table + "." + c }) +
     right.columns.map(fn(c) { join.table + "." + c })
-  let rows : Array[Array[Value]] = []
-  for lr in left.rows {
-    for rr in right.rows {
+
+  // Every matching left/right pair, plus a per-row flag that it found a match.
+  let matched : Array[Array[Value]] = []
+  let left_matched : Array[Bool] = left.rows.map(fn(_) { false })
+  let right_matched : Array[Bool] = right.rows.map(fn(_) { false })
+  for i, lr in left.rows {
+    for j, rr in right.rows {
       let combined = lr + rr
       if matches(Some(join.on), columns, combined) {
-        rows.push(combined)
+        matched.push(combined)
+        left_matched[i] = true
+        right_matched[j] = true
       }
     }
   }
+
+  let rows = match join.kind {
+    JoinKind::Inner => matched
+    JoinKind::Left => {
+      for i, lr in left.rows {
+        if !left_matched[i] {
+          matched.push(lr + null_row(right.columns.length()))
+        }
+      }
+      matched
+    }
+    JoinKind::Right => {
+      for j, rr in right.rows {
+        if !right_matched[j] {
+          matched.push(null_row(left.columns.length()) + rr)
+        }
+      }
+      matched
+    }
+    JoinKind::Full => {
+      for i, lr in left.rows {
+        if !left_matched[i] {
+          matched.push(lr + null_row(right.columns.length()))
+        }
+      }
+      for j, rr in right.rows {
+        if !right_matched[j] {
+          matched.push(null_row(left.columns.length()) + rr)
+        }
+      }
+      matched
+    }
+  }
   (columns, rows)
+}
+
+///|
+/// An array of `n` null values, used to pad the missing side of an outer join.
+fn null_row(n : Int) -> Array[Value] {
+  let out : Array[Value] = []
+  for _ in 0..<n {
+    out.push(Value::Null)
+  }
+  out
 }
 
 ///|
@@ -99,20 +149,7 @@ fn mem_select(mem : Memory, query : Select) -> Array[Row] raise OrmError {
   validate_supported(query.condition)
   validate_supported(query.having)
   match query.join {
-    Some(j) => {
-      validate_supported(Some(j.on))
-      match j.kind {
-        JoinKind::Inner => ()
-        JoinKind::Left =>
-          raise OrmError::Backend(
-            "LEFT JOIN is not supported by the in-memory backend",
-          )
-        JoinKind::Right =>
-          raise OrmError::Backend(
-            "RIGHT JOIN is not supported by the in-memory backend",
-          )
-      }
-    }
+    Some(j) => validate_supported(Some(j.on))
     None => ()
   }
   let (columns, rows) = match query.join {

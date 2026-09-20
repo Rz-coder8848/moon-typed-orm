@@ -117,6 +117,7 @@ pub enum JoinKind {
   Inner
   Left
   Right
+  Full
 } derive(Eq, @debug.Debug)
 
 ///|
