@@ -356,3 +356,56 @@ test "memory group by sum with having" {
   assert_eq(groups[0].get("city"), Some(Value::text("NY")))
   assert_eq(groups[0].get("sum"), Some(Value::int(30)))
 }
+
+///|
+test "memory in subquery filters by the subquery result" {
+  let db = Memory::new()
+  try! db.create_table("users", ["id", "name"])
+  try! db.create_table("orders", ["id", "user_id"])
+  let uid : Column[Int] = Column::new("users", "id")
+  let uname : Column[String] = Column::new("users", "name")
+  let oid : Column[Int] = Column::new("orders", "id")
+  let ouid : Column[Int] = Column::new("orders", "user_id")
+
+  let _ = try! db.insert(Insert::into("users").set(uid.set(1)).set(uname.set("alice")))
+  let _ = try! db.insert(Insert::into("users").set(uid.set(2)).set(uname.set("bob")))
+  let _ = try! db.insert(Insert::into("users").set(uid.set(3)).set(uname.set("carol")))
+  let _ = try! db.insert(Insert::into("orders").set(oid.set(100)).set(ouid.set(1)))
+  let _ = try! db.insert(Insert::into("orders").set(oid.set(101)).set(ouid.set(3)))
+
+  let sub = Select::from("orders").columns([ouid.to_ref()])
+  let rows = try! db.select(
+    Select::from("users").where_(uid.in_select(sub)).order_by(uid.asc()),
+  )
+  assert_eq(rows.length(), 2)
+  assert_eq(rows[0].get("name"), Some(Value::Text("alice")))
+  assert_eq(rows[1].get("name"), Some(Value::Text("carol")))
+}
+
+///|
+test "memory exists subquery is a global gate" {
+  let db = Memory::new()
+  try! db.create_table("users", ["id", "name"])
+  try! db.create_table("orders", ["id", "item"])
+  let uid : Column[Int] = Column::new("users", "id")
+  let uname : Column[String] = Column::new("users", "name")
+  let oid : Column[Int] = Column::new("orders", "id")
+  let item : Column[String] = Column::new("orders", "item")
+
+  let _ = try! db.insert(Insert::into("users").set(uid.set(1)).set(uname.set("alice")))
+  let _ = try! db.insert(Insert::into("orders").set(oid.set(100)).set(item.set("book")))
+
+  let hit = try! db.select(
+    Select::from("users").where_(
+      Condition::exists(Select::from("orders").where_(item.eq("book"))),
+    ),
+  )
+  assert_eq(hit.length(), 1)
+
+  let miss = try! db.select(
+    Select::from("users").where_(
+      Condition::exists(Select::from("orders").where_(item.eq("pen"))),
+    ),
+  )
+  assert_eq(miss.length(), 0)
+}

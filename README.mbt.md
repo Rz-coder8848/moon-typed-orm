@@ -28,7 +28,8 @@ let stmt = Select::from("users")
 - `ast.mbt` — the DSL: `Column`, `Condition`, `Order`, `Assignment`.
 - `query.mbt` — `Select` / `Insert` / `Update` / `Delete` builders and `Statement`,
   plus aggregates (`COUNT` / `SUM` / `AVG` / `MIN` / `MAX`), `GROUP BY` / `HAVING`,
-  and `INNER` / `LEFT` / `RIGHT` / `FULL JOIN`.
+  `INNER` / `LEFT` / `RIGHT` / `FULL JOIN`, and non-correlated subqueries
+  (`IN` / `EXISTS`).
 - `conn.mbt` — `Row`, `ExecResult`, and the `Connection` / `Transactional` traits.
 - `memory.mbt` — an in-memory `Connection` implementation (no FFI, no deps).
 - `error.mbt` — `OrmError`.
@@ -39,7 +40,7 @@ let stmt = Select::from("users")
 ## Running
 
 ```sh
-moon test                    # 36 tests on wasm-gc: SQL rendering, errors, in-memory CRUD
+moon test                    # 41 tests on wasm-gc: SQL rendering, errors, CRUD, joins, subqueries
 moon test --target native    # + 3 SQLite tests (CRUD, null/float, transactions)
 moon run cmd/main            # in-memory demo: build -> execute -> rows
 moon run cmd/sqlite_demo --target native  # the same demo against SQLite
@@ -94,6 +95,22 @@ let stmt = Select::from("orders")
 // SELECT * FROM "orders" LEFT JOIN "users" ON "orders"."user_id" = "users"."id"
 // `.join` is the inner join; `.left_join`, `.right_join`, and `.full_join`
 // are the outer joins.
+```
+
+Non-correlated subqueries plug into `WHERE`:
+
+```moonbit nocheck
+///|
+let user_id : Column[Int] = Column::new("orders", "user_id")
+
+///|
+let stmt = Select::from("users")
+  .where_(Column::new("users", "id").in_select(
+    Select::from("orders").columns([user_id.to_ref()]),
+  ))
+  .build()
+// SELECT * FROM "users" WHERE "users"."id" IN (SELECT "orders"."user_id" FROM "orders")
+// `Condition::exists(sub)` gives EXISTS; wrap in `.not_()` for NOT EXISTS.
 ```
 
 ## The `Connection` boundary
@@ -167,9 +184,10 @@ transaction.
 
 ## Limits
 
-- One join per `SELECT` (`INNER` / `LEFT` / `RIGHT` / `FULL`); no subqueries.
-  The in-memory backend evaluates all four join kinds, padding the missing side
-  with nulls.
+- One join per `SELECT` (`INNER` / `LEFT` / `RIGHT` / `FULL`); the in-memory
+  backend evaluates all four join kinds, padding the missing side with nulls.
+- Subqueries are non-correlated (`IN` / `EXISTS`) — a subquery cannot reference
+  the outer row. Correlated and scalar subqueries are not supported.
 - Transactions are opt-in via `Transactional`: `Sqlite` implements it, `Memory`
   does not.
 - `Condition::raw` works for SQL rendering but is rejected by `Memory`.

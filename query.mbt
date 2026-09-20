@@ -24,7 +24,7 @@ struct Join {
   table : String
   on : Condition
   kind : JoinKind
-}
+} derive(Eq, @debug.Debug)
 
 ///|
 /// Build a `SELECT`.
@@ -39,7 +39,7 @@ pub struct Select {
   orders : Array[Order]
   limit : Int?
   offset : Int?
-}
+} derive(Eq, @debug.Debug)
 
 ///|
 pub fn Select::from(table : String) -> Select {
@@ -311,7 +311,7 @@ pub fn Delete::build(self : Delete) -> Statement raise OrmError {
 }
 
 ///|
-fn render_where(condition : Condition?) -> (String, Array[Value]) {
+fn render_where(condition : Condition?) -> (String, Array[Value]) raise OrmError {
   match condition {
     None => ("", [])
     Some(cond) => {
@@ -344,7 +344,7 @@ fn render_group(group_by : Array[ColumnRef]) -> String {
 }
 
 ///|
-fn render_having(having : Condition?) -> (String, Array[Value]) {
+fn render_having(having : Condition?) -> (String, Array[Value]) raise OrmError {
   match having {
     None => ("", [])
     Some(cond) => {
@@ -355,7 +355,7 @@ fn render_having(having : Condition?) -> (String, Array[Value]) {
 }
 
 ///|
-fn render_join(join : Join?) -> (String, Array[Value]) {
+fn render_join(join : Join?) -> (String, Array[Value]) raise OrmError {
   match join {
     None => ("", [])
     Some(j) => {
@@ -388,7 +388,7 @@ fn render_aggregate(agg : Aggregate) -> String {
 }
 
 ///|
-fn render_condition(cond : Condition) -> (String, Array[Value]) {
+fn render_condition(cond : Condition) -> (String, Array[Value]) raise OrmError {
   match cond {
     Condition::Compare(col, op, value) =>
       (quote_column(col) + " \{op_sql(op)} ?", [value])
@@ -399,8 +399,16 @@ fn render_condition(cond : Condition) -> (String, Array[Value]) {
         quote_column(col) + " IN (" + values.map(fn(_) { "?" }).join(", ") + ")",
         values,
       )
+    Condition::InSelect(col, sub) => {
+      let stmt = sub.build()
+      (quote_column(col) + " IN (" + stmt.sql + ")", stmt.params)
+    }
     Condition::IsNull(col) => (quote_column(col) + " IS NULL", [])
     Condition::IsNotNull(col) => (quote_column(col) + " IS NOT NULL", [])
+    Condition::Exists(sub) => {
+      let stmt = sub.build()
+      ("EXISTS (" + stmt.sql + ")", stmt.params)
+    }
     Condition::And(a, b) => {
       let (a_sql, a_params) = render_condition(a)
       let (b_sql, b_params) = render_condition(b)

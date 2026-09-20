@@ -60,8 +60,10 @@ pub enum Condition {
   Compare(ColumnRef, CompareOp, Value)
   CompareCol(ColumnRef, CompareOp, ColumnRef)
   In(ColumnRef, Array[Value])
+  InSelect(ColumnRef, Select)
   IsNull(ColumnRef)
   IsNotNull(ColumnRef)
+  Exists(Select)
   And(Condition, Condition)
   Or(Condition, Condition)
   Not(Condition)
@@ -91,6 +93,14 @@ pub fn Condition::not_(self : Condition) -> Condition {
 /// Prefer the typed helpers; use this only for operators the DSL doesn't model.
 pub fn Condition::raw(sql : String) -> Condition {
   Condition::Raw(sql)
+}
+
+///|
+/// `EXISTS (SELECT ...)` — true when the subquery returns at least one row.
+/// Combine with [`Condition::not_`] for `NOT EXISTS`. Non-correlated only: the
+/// subquery cannot reference the outer query's rows.
+pub fn Condition::exists(sub : Select) -> Condition {
+  Condition::Exists(sub)
 }
 
 ///|
@@ -175,6 +185,14 @@ pub fn[T : ToValue] Column::in_(
   values : Array[T],
 ) -> Condition {
   Condition::In(self.reference, values.map(fn(v) { v.to_value() }))
+}
+
+///|
+/// Match this column against a single-column subquery (`col IN (SELECT ...)`).
+/// The subquery selects one column; the in-memory backend uses its first. The
+/// subquery is non-correlated: it cannot reference the outer query's rows.
+pub fn[T] Column::in_select(self : Column[T], sub : Select) -> Condition {
+  Condition::InSelect(self.reference, sub)
 }
 
 ///|

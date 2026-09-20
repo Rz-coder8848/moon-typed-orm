@@ -261,3 +261,40 @@ test "where and having params concatenate in order" {
   )
   assert_eq(stmt.params, [Value::Int(18), Value::Text("")])
 }
+
+///|
+test "in subquery renders a nested select with its params" {
+  let users : Column[Int] = Column::new("users", "id")
+  let user_id : Column[Int] = Column::new("orders", "user_id")
+  let sub = Select::from("orders").where_(user_id.gt(0))
+  let stmt = try! Select::from("users").where_(users.in_select(sub)).build()
+  assert_eq(
+    stmt.sql,
+    "SELECT * FROM \"users\" WHERE \"users\".\"id\" IN (SELECT * FROM \"orders\" WHERE \"orders\".\"user_id\" > ?)",
+  )
+  assert_eq(stmt.params, [Value::Int(0)])
+}
+
+///|
+test "exists subquery renders" {
+  let stmt = try! Select::from("users")
+    .where_(Condition::exists(Select::from("orders")))
+    .build()
+  assert_eq(
+    stmt.sql,
+    "SELECT * FROM \"users\" WHERE EXISTS (SELECT * FROM \"orders\")",
+  )
+  assert_true(stmt.params.is_empty())
+}
+
+///|
+test "not exists renders via not_" {
+  let stmt = try! Select::from("users")
+    .where_(Condition::exists(Select::from("orders")).not_())
+    .build()
+  assert_eq(
+    stmt.sql,
+    "SELECT * FROM \"users\" WHERE (NOT EXISTS (SELECT * FROM \"orders\"))",
+  )
+  assert_true(stmt.params.is_empty())
+}

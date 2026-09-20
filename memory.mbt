@@ -91,7 +91,7 @@ fn join_rows(
   for i, lr in left.rows {
     for j, rr in right.rows {
       let combined = lr + rr
-      if matches(Some(join.on), columns, combined) {
+      if matches(mem, Some(join.on), columns, combined) {
         matched.push(combined)
         left_matched[i] = true
         right_matched[j] = true
@@ -159,7 +159,12 @@ fn mem_select(mem : Memory, query : Select) -> Array[Row] raise OrmError {
     }
     Some(j) => join_rows(mem, query.table, j)
   }
-  let filtered = rows.filter(fn(row) { matches(query.condition, columns, row) })
+  let filtered : Array[Array[Value]] = []
+  for row in rows {
+    if matches(mem, query.condition, columns, row) {
+      filtered.push(row)
+    }
+  }
   if query.group_by.is_empty() {
     match query.aggregate {
       Some(agg) => {
@@ -175,7 +180,7 @@ fn mem_select(mem : Memory, query : Select) -> Array[Row] raise OrmError {
       }
     }
   } else {
-    mem_select_grouped(columns, query, filtered)
+    mem_select_grouped(mem, columns, query, filtered)
   }
 }
 
@@ -196,16 +201,16 @@ fn mem_insert(mem : Memory, query : Insert) -> ExecResult raise OrmError {
 fn mem_update(mem : Memory, query : Update) -> ExecResult raise OrmError {
   validate_supported(query.condition)
   let table = get_table(mem.tables, query.table)
-  let affected = table.rows
-    .filter(fn(row) { matches(query.condition, table.columns, row) })
-    .length()
-  let updated = table.rows.map(fn(row) {
-    if matches(query.condition, table.columns, row) {
-      apply_assignments(row, table.columns, query.assignments)
+  let mut affected = 0
+  let updated : Array[Array[Value]] = []
+  for row in table.rows {
+    if matches(mem, query.condition, table.columns, row) {
+      affected = affected + 1
+      updated.push(apply_assignments(row, table.columns, query.assignments))
     } else {
-      row
+      updated.push(row)
     }
-  })
+  }
   mem.tables.set(query.table, { ..table, rows: updated, })
   ExecResult::new(affected)
 }
@@ -214,9 +219,12 @@ fn mem_update(mem : Memory, query : Update) -> ExecResult raise OrmError {
 fn mem_delete(mem : Memory, query : Delete) -> ExecResult raise OrmError {
   validate_supported(query.condition)
   let table = get_table(mem.tables, query.table)
-  let kept = table.rows.filter(fn(row) {
-    !matches(query.condition, table.columns, row)
-  })
+  let kept : Array[Array[Value]] = []
+  for row in table.rows {
+    if !matches(mem, query.condition, table.columns, row) {
+      kept.push(row)
+    }
+  }
   let affected = table.rows.length() - kept.length()
   mem.tables.set(query.table, { ..table, rows: kept, })
   ExecResult::new(affected)
@@ -224,22 +232,24 @@ fn mem_delete(mem : Memory, query : Delete) -> ExecResult raise OrmError {
 
 ///|
 fn matches(
+  mem : Memory,
   condition : Condition?,
   columns : Array[String],
   row : Array[Value],
-) -> Bool {
+) -> Bool raise OrmError {
   match condition {
     None => true
-    Some(c) => eval_condition(c, columns, row)
+    Some(c) => eval_condition(mem, c, columns, row)
   }
 }
 
 ///|
 fn eval_condition(
+  mem : Memory,
   cond : Condition,
   columns : Array[String],
   row : Array[Value],
-) -> Bool {
+) -> Bool raise OrmError {
   match cond {
     Condition::Compare(col, op, value) =>
       match column_value(col, columns, row) {
@@ -257,6 +267,19 @@ fn eval_condition(
         None => false
         Some(actual) => values.contains(actual)
       }
+    Condition::InSelect(col, sub) => {
+      let sub_rows = mem_select(mem, sub)
+      let vals = sub_rows.map(fn(r) {
+        match r.get_at(0) {
+          None => Value::Null
+          Some(v) => v
+        }
+      })
+      match column_value(col, columns, row) {
+        None => false
+        Some(actual) => vals.contains(actual)
+      }
+    }
     Condition::IsNull(col) =>
       match column_value(col, columns, row) {
         None => true
@@ -269,11 +292,12 @@ fn eval_condition(
         Some(Value::Null) => false
         Some(_) => true
       }
+    Condition::Exists(sub) => !mem_select(mem, sub).is_empty()
     Condition::And(a, b) =>
-      eval_condition(a, columns, row) && eval_condition(b, columns, row)
+      eval_condition(mem, a, columns, row) && eval_condition(mem, b, columns, row)
     Condition::Or(a, b) =>
-      eval_condition(a, columns, row) || eval_condition(b, columns, row)
-    Condition::Not(a) => !eval_condition(a, columns, row)
+      eval_condition(mem, a, columns, row) || eval_condition(mem, b, columns, row)
+    Condition::Not(a) => !eval_condition(mem, a, columns, row)
     Condition::Raw(_) => false
   }
 }
@@ -662,10 +686,11 @@ fn extreme_value(vals : Array[Value?], want_max : Bool) -> Value {
 /// each bucket collapses into one row (an aggregate over the bucket, or the
 /// distinct grouping key when there is no aggregate).
 fn mem_select_grouped(
+  mem : Memory,
   columns : Array[String],
   query : Select,
   filtered : Array[Array[Value]],
-) -> Array[Row] {
+) -> Array[Row] raise OrmError {
   let groups = group_rows(filtered, columns, query.group_by)
   let group_cols = query.group_by.map(fn(c) { c.name })
   let out_cols = match query.aggregate {
@@ -674,7 +699,7 @@ fn mem_select_grouped(
   }
   let out_rows : Array[Array[Value]] = []
   for (key, group) in groups {
-    if matches(query.having, group_cols, key) {
+    if matches(mem, query.having, group_cols, key) {
       match query.aggregate {
         Some(agg) => out_rows.push(key + [aggregate_value(agg, columns, group)])
         None => out_rows.push(key)
