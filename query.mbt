@@ -145,21 +145,33 @@ pub fn Select::join(self : Select, table : String, on : Condition) -> Select {
 ///|
 /// Left-join another table on a condition. Rows from the left table are kept
 /// even when no row on the right matches (right-hand columns become null).
-pub fn Select::left_join(self : Select, table : String, on : Condition) -> Select {
+pub fn Select::left_join(
+  self : Select,
+  table : String,
+  on : Condition,
+) -> Select {
   { ..self, join: Some({ table, on, kind: JoinKind::Left, }), }
 }
 
 ///|
 /// Right-join another table on a condition. Rows from the right table are kept
 /// even when no row on the left matches (left-hand columns become null).
-pub fn Select::right_join(self : Select, table : String, on : Condition) -> Select {
+pub fn Select::right_join(
+  self : Select,
+  table : String,
+  on : Condition,
+) -> Select {
   { ..self, join: Some({ table, on, kind: JoinKind::Right, }), }
 }
 
 ///|
 /// Full-join another table on a condition. Rows from either side are kept even
 /// when no row on the other side matches (the missing side becomes null).
-pub fn Select::full_join(self : Select, table : String, on : Condition) -> Select {
+pub fn Select::full_join(
+  self : Select,
+  table : String,
+  on : Condition,
+) -> Select {
   { ..self, join: Some({ table, on, kind: JoinKind::Full, }), }
 }
 
@@ -311,7 +323,9 @@ pub fn Delete::build(self : Delete) -> Statement raise OrmError {
 }
 
 ///|
-fn render_where(condition : Condition?) -> (String, Array[Value]) raise OrmError {
+fn render_where(
+  condition : Condition?,
+) -> (String, Array[Value]) raise OrmError {
   match condition {
     None => ("", [])
     Some(cond) => {
@@ -360,7 +374,10 @@ fn render_join(join : Join?) -> (String, Array[Value]) raise OrmError {
     None => ("", [])
     Some(j) => {
       let (on_sql, on_params) = render_condition(j.on)
-      (render_join_kind(j.kind) + " \{quote_ident(j.table)} ON \{on_sql}", on_params)
+      (
+        render_join_kind(j.kind) + " \{quote_ident(j.table)} ON \{on_sql}",
+        on_params,
+      )
     }
   }
 }

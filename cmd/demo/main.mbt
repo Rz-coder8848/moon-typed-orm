@@ -15,14 +15,18 @@ fn main {
   let city : @moonorm.Column[String] = @moonorm.Column::new("users", "city")
   let oid : @moonorm.Column[Int] = @moonorm.Column::new("orders", "id")
   let user_id : @moonorm.Column[Int] = @moonorm.Column::new("orders", "user_id")
-  let amount : @moonorm.Column[Double] = @moonorm.Column::new("orders", "amount")
+  let amount : @moonorm.Column[Double] = @moonorm.Column::new(
+    "orders", "amount",
+  )
 
   seed_users(db, id, name, age, city)
   seed_orders(db, oid, user_id, amount)
 
   // Injection safety: a value carrying SQL keywords stays a bound value.
   let injected = "alice' OR 1=1 --"
-  let stmt = try! @moonorm.Select::from("users").where_(name.eq(injected)).build()
+  let stmt = try! @moonorm.Select::from("users")
+    .where_(name.eq(injected))
+    .build()
   println("=== injection safety ===")
   println("sql:    \{stmt.to_sql()}")
   println("params: \{format_params(stmt.to_params())}")
@@ -51,18 +55,27 @@ fn main {
   let by_city = @moonorm.Select::from("users").group_by(city).count()
   println("sql: \{try! by_city.build().to_sql()}")
   print_rows(try! db.select(by_city), ["city", "count"])
-  let having_sql = try! by_city.having(@moonorm.Condition::raw("COUNT(*) > 1")).build()
+  let having_sql = try! by_city
+    .having(@moonorm.Condition::raw("COUNT(*) > 1"))
+    .build()
   println("sql (having): \{having_sql.to_sql()}")
 
   // Joins.
   println("=== inner join ===")
   let inner = @moonorm.Select::from("users").join("orders", user_id.eq_col(id))
   println("sql: \{try! inner.build().to_sql()}")
-  print_rows(try! db.select(inner), ["users.id", "users.name", "orders.id", "orders.amount"])
+  print_rows(try! db.select(inner), [
+    "users.id", "users.name", "orders.id", "orders.amount",
+  ])
   println("=== left join ===")
-  let left = @moonorm.Select::from("orders").left_join("users", user_id.eq_col(id))
+  let left = @moonorm.Select::from("orders").left_join(
+    "users",
+    user_id.eq_col(id),
+  )
   println("sql: \{try! left.build().to_sql()}")
-  print_rows(try! db.select(left), ["orders.id", "orders.user_id", "users.id", "users.name"])
+  print_rows(try! db.select(left), [
+    "orders.id", "orders.user_id", "users.id", "users.name",
+  ])
 
   // Subqueries.
   println("=== subquery: IN ===")
@@ -75,19 +88,23 @@ fn main {
 
   println("=== subquery: correlated EXISTS ===")
   let has_order = @moonorm.Select::from("orders").where_(user_id.eq_col(id))
-  let q_exists = @moonorm.Select::from("users").where_(@moonorm.Condition::exists(has_order))
+  let q_exists = @moonorm.Select::from("users").where_(
+    @moonorm.Condition::exists(has_order),
+  )
   println("sql: \{try! q_exists.build().to_sql()}")
   print_rows(try! db.select(q_exists), ["id", "name"])
 
   println("=== subquery: scalar (above average age) ===")
-  let q_scalar = @moonorm.Select::from("users")
-    .where_(age.gt_sub(@moonorm.Select::from("users").avg(age)))
+  let q_scalar = @moonorm.Select::from("users").where_(
+    age.gt_sub(@moonorm.Select::from("users").avg(age)),
+  )
   println("sql: \{try! q_scalar.build().to_sql()}")
   print_rows(try! db.select(q_scalar), ["id", "name", "age"])
 
   println("=== subquery: correlated NOT EXISTS ===")
-  let q_none = @moonorm.Select::from("users")
-    .where_(@moonorm.Condition::exists(has_order).not_())
+  let q_none = @moonorm.Select::from("users").where_(
+    @moonorm.Condition::exists(has_order).not_(),
+  )
   println("sql: \{try! q_none.build().to_sql()}")
   print_rows(try! db.select(q_none), ["id", "name"])
 }
@@ -100,12 +117,13 @@ fn seed_users(
   age : @moonorm.Column[Int],
   city : @moonorm.Column[String],
 ) -> Unit {
-  for (i, n, a, c) in [
-    (1, "alice", 30, "sh"),
-    (2, "bob", 17, "bj"),
-    (3, "carol", 25, "sh"),
-    (4, "dave", 41, "gz"),
-  ] {
+  for
+    (i, n, a, c) in [
+      (1, "alice", 30, "sh"),
+      (2, "bob", 17, "bj"),
+      (3, "carol", 25, "sh"),
+      (4, "dave", 41, "gz"),
+    ] {
     let _ = try! db.insert(
       @moonorm.Insert::into("users")
       .set(id.set(i))
@@ -123,11 +141,7 @@ fn seed_orders(
   user_id : @moonorm.Column[Int],
   amount : @moonorm.Column[Double],
 ) -> Unit {
-  for (i, u, amt) in [
-    (1, 1, 12.5),
-    (2, 3, 8.0),
-    (3, 99, 3.0),
-  ] {
+  for (i, u, amt) in [(1, 1, 12.5), (2, 3, 8.0), (3, 99, 3.0)] {
     let _ = try! db.insert(
       @moonorm.Insert::into("orders")
       .set(oid.set(i))

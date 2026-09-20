@@ -91,7 +91,14 @@ fn join_rows(
   for i, lr in left.rows {
     for j, rr in right.rows {
       let combined = lr + rr
-      if matches(mem, Some(join.on), [left_table, join.table], columns, combined, None) {
+      if matches(
+          mem,
+          Some(join.on),
+          [left_table, join.table],
+          columns,
+          combined,
+          None,
+        ) {
         matched.push(combined)
         left_matched[i] = true
         right_matched[j] = true
@@ -269,10 +276,11 @@ fn eval_condition(
         Some(actual) => compare_values(actual, op, value)
       }
     Condition::CompareCol(left, op, right) =>
-      match (
-        column_value_scoped(left, tables, columns, row, outer),
-        column_value_scoped(right, tables, columns, row, outer),
-      ) {
+      match
+        (
+          column_value_scoped(left, tables, columns, row, outer),
+          column_value_scoped(right, tables, columns, row, outer),
+        ) {
         (Some(a), Some(b)) => compare_values(a, op, b)
         _ => false
       }
@@ -281,7 +289,8 @@ fn eval_condition(
       match sub_rows.get(0) {
         None => false
         Some(r) =>
-          match (column_value_scoped(col, tables, columns, row, outer), r.get_at(0)) {
+          match
+            (column_value_scoped(col, tables, columns, row, outer), r.get_at(0)) {
             (Some(actual), Some(scalar)) => compare_values(actual, op, scalar)
             _ => false
           }
@@ -317,7 +326,8 @@ fn eval_condition(
         Some(Value::Null) => false
         Some(_) => true
       }
-    Condition::Exists(sub) => !mem_select(mem, sub, Some((columns, row))).is_empty()
+    Condition::Exists(sub) =>
+      !mem_select(mem, sub, Some((columns, row))).is_empty()
     Condition::And(a, b) =>
       eval_condition(mem, a, tables, columns, row, outer) &&
       eval_condition(mem, b, tables, columns, row, outer)

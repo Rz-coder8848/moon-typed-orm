@@ -66,7 +66,9 @@ fn main {
   try! db.exec("CREATE TABLE orders (id INTEGER, user_id INTEGER, amount REAL)")
   let oid : @moonorm.Column[Int] = @moonorm.Column::new("orders", "id")
   let user_id : @moonorm.Column[Int] = @moonorm.Column::new("orders", "user_id")
-  let amount : @moonorm.Column[Double] = @moonorm.Column::new("orders", "amount")
+  let amount : @moonorm.Column[Double] = @moonorm.Column::new(
+    "orders", "amount",
+  )
   let _ = try! db.insert(
     @moonorm.Insert::into("orders")
     .set(oid.set(1))
@@ -79,7 +81,10 @@ fn main {
     .set(user_id.set(99))
     .set(amount.set(3.0)),
   )
-  let joined = @moonorm.Select::from("orders").left_join("users", user_id.eq_col(id))
+  let joined = @moonorm.Select::from("orders").left_join(
+    "users",
+    user_id.eq_col(id),
+  )
   println("SQL (LEFT JOIN): \{try! joined.build().to_sql()}")
 
   let _ = try! db.update(

@@ -245,10 +245,17 @@ test "memory left join keeps unmatched left rows" {
   let ouid : Column[Int] = Column::new("orders", "user_id")
   let item : Column[String] = Column::new("orders", "item")
 
-  let _ = try! db.insert(Insert::into("users").set(uid.set(1)).set(uname.set("alice")))
-  let _ = try! db.insert(Insert::into("users").set(uid.set(2)).set(uname.set("bob")))
   let _ = try! db.insert(
-    Insert::into("orders").set(oid.set(100)).set(ouid.set(1)).set(item.set("book")),
+    Insert::into("users").set(uid.set(1)).set(uname.set("alice")),
+  )
+  let _ = try! db.insert(
+    Insert::into("users").set(uid.set(2)).set(uname.set("bob")),
+  )
+  let _ = try! db.insert(
+    Insert::into("orders")
+    .set(oid.set(100))
+    .set(ouid.set(1))
+    .set(item.set("book")),
   )
 
   let rows = try! db.select(
@@ -275,12 +282,20 @@ test "memory right join keeps unmatched right rows" {
   let ouid : Column[Int] = Column::new("orders", "user_id")
   let item : Column[String] = Column::new("orders", "item")
 
-  let _ = try! db.insert(Insert::into("users").set(uid.set(1)).set(uname.set("alice")))
   let _ = try! db.insert(
-    Insert::into("orders").set(oid.set(100)).set(ouid.set(1)).set(item.set("book")),
+    Insert::into("users").set(uid.set(1)).set(uname.set("alice")),
   )
   let _ = try! db.insert(
-    Insert::into("orders").set(oid.set(101)).set(ouid.set(2)).set(item.set("cup")),
+    Insert::into("orders")
+    .set(oid.set(100))
+    .set(ouid.set(1))
+    .set(item.set("book")),
+  )
+  let _ = try! db.insert(
+    Insert::into("orders")
+    .set(oid.set(101))
+    .set(ouid.set(2))
+    .set(item.set("cup")),
   )
 
   let rows = try! db.select(
@@ -306,13 +321,23 @@ test "memory full join keeps unmatched rows on both sides" {
   let ouid : Column[Int] = Column::new("orders", "user_id")
   let item : Column[String] = Column::new("orders", "item")
 
-  let _ = try! db.insert(Insert::into("users").set(uid.set(1)).set(uname.set("alice")))
-  let _ = try! db.insert(Insert::into("users").set(uid.set(2)).set(uname.set("bob")))
   let _ = try! db.insert(
-    Insert::into("orders").set(oid.set(100)).set(ouid.set(1)).set(item.set("book")),
+    Insert::into("users").set(uid.set(1)).set(uname.set("alice")),
   )
   let _ = try! db.insert(
-    Insert::into("orders").set(oid.set(101)).set(ouid.set(3)).set(item.set("cup")),
+    Insert::into("users").set(uid.set(2)).set(uname.set("bob")),
+  )
+  let _ = try! db.insert(
+    Insert::into("orders")
+    .set(oid.set(100))
+    .set(ouid.set(1))
+    .set(item.set("book")),
+  )
+  let _ = try! db.insert(
+    Insert::into("orders")
+    .set(oid.set(101))
+    .set(ouid.set(3))
+    .set(item.set("cup")),
   )
 
   let rows = try! db.select(
@@ -367,11 +392,21 @@ test "memory in subquery filters by the subquery result" {
   let oid : Column[Int] = Column::new("orders", "id")
   let ouid : Column[Int] = Column::new("orders", "user_id")
 
-  let _ = try! db.insert(Insert::into("users").set(uid.set(1)).set(uname.set("alice")))
-  let _ = try! db.insert(Insert::into("users").set(uid.set(2)).set(uname.set("bob")))
-  let _ = try! db.insert(Insert::into("users").set(uid.set(3)).set(uname.set("carol")))
-  let _ = try! db.insert(Insert::into("orders").set(oid.set(100)).set(ouid.set(1)))
-  let _ = try! db.insert(Insert::into("orders").set(oid.set(101)).set(ouid.set(3)))
+  let _ = try! db.insert(
+    Insert::into("users").set(uid.set(1)).set(uname.set("alice")),
+  )
+  let _ = try! db.insert(
+    Insert::into("users").set(uid.set(2)).set(uname.set("bob")),
+  )
+  let _ = try! db.insert(
+    Insert::into("users").set(uid.set(3)).set(uname.set("carol")),
+  )
+  let _ = try! db.insert(
+    Insert::into("orders").set(oid.set(100)).set(ouid.set(1)),
+  )
+  let _ = try! db.insert(
+    Insert::into("orders").set(oid.set(101)).set(ouid.set(3)),
+  )
 
   let sub = Select::from("orders").columns([ouid.to_ref()])
   let rows = try! db.select(
@@ -392,8 +427,12 @@ test "memory exists subquery is a global gate" {
   let oid : Column[Int] = Column::new("orders", "id")
   let item : Column[String] = Column::new("orders", "item")
 
-  let _ = try! db.insert(Insert::into("users").set(uid.set(1)).set(uname.set("alice")))
-  let _ = try! db.insert(Insert::into("orders").set(oid.set(100)).set(item.set("book")))
+  let _ = try! db.insert(
+    Insert::into("users").set(uid.set(1)).set(uname.set("alice")),
+  )
+  let _ = try! db.insert(
+    Insert::into("orders").set(oid.set(100)).set(item.set("book")),
+  )
 
   let hit = try! db.select(
     Select::from("users").where_(
@@ -454,14 +493,26 @@ test "memory correlated exists resolves outer column" {
   let ouid : Column[Int] = Column::new("orders", "user_id")
   let item : Column[String] = Column::new("orders", "item")
 
-  let _ = try! db.insert(Insert::into("users").set(uid.set(1)).set(uname.set("alice")))
-  let _ = try! db.insert(Insert::into("users").set(uid.set(2)).set(uname.set("bob")))
-  let _ = try! db.insert(Insert::into("users").set(uid.set(3)).set(uname.set("carol")))
   let _ = try! db.insert(
-    Insert::into("orders").set(oid.set(100)).set(ouid.set(1)).set(item.set("book")),
+    Insert::into("users").set(uid.set(1)).set(uname.set("alice")),
   )
   let _ = try! db.insert(
-    Insert::into("orders").set(oid.set(101)).set(ouid.set(3)).set(item.set("cup")),
+    Insert::into("users").set(uid.set(2)).set(uname.set("bob")),
+  )
+  let _ = try! db.insert(
+    Insert::into("users").set(uid.set(3)).set(uname.set("carol")),
+  )
+  let _ = try! db.insert(
+    Insert::into("orders")
+    .set(oid.set(100))
+    .set(ouid.set(1))
+    .set(item.set("book")),
+  )
+  let _ = try! db.insert(
+    Insert::into("orders")
+    .set(oid.set(101))
+    .set(ouid.set(3))
+    .set(item.set("cup")),
   )
 
   // `users.id` is the outer column; `orders` also has an `id`, so a naive
@@ -485,9 +536,15 @@ test "memory correlated not exists finds missing rows" {
   let oid : Column[Int] = Column::new("orders", "id")
   let ouid : Column[Int] = Column::new("orders", "user_id")
 
-  let _ = try! db.insert(Insert::into("users").set(uid.set(1)).set(uname.set("alice")))
-  let _ = try! db.insert(Insert::into("users").set(uid.set(2)).set(uname.set("bob")))
-  let _ = try! db.insert(Insert::into("orders").set(oid.set(100)).set(ouid.set(1)))
+  let _ = try! db.insert(
+    Insert::into("users").set(uid.set(1)).set(uname.set("alice")),
+  )
+  let _ = try! db.insert(
+    Insert::into("users").set(uid.set(2)).set(uname.set("bob")),
+  )
+  let _ = try! db.insert(
+    Insert::into("orders").set(oid.set(100)).set(ouid.set(1)),
+  )
 
   let sub = Select::from("orders").where_(ouid.eq_col(uid))
   let rows = try! db.select(
@@ -510,16 +567,25 @@ test "memory correlated scalar subquery compares per outer row" {
   let amount : Column[Int] = Column::new("orders", "amount")
 
   let _ = try! db.insert(
-    Insert::into("users").set(uid.set(1)).set(uname.set("alice")).set(age.set(50)),
+    Insert::into("users")
+    .set(uid.set(1))
+    .set(uname.set("alice"))
+    .set(age.set(50)),
   )
   let _ = try! db.insert(
     Insert::into("users").set(uid.set(2)).set(uname.set("bob")).set(age.set(10)),
   )
   let _ = try! db.insert(
-    Insert::into("orders").set(oid.set(100)).set(ouid.set(1)).set(amount.set(20)),
+    Insert::into("orders")
+    .set(oid.set(100))
+    .set(ouid.set(1))
+    .set(amount.set(20)),
   )
   let _ = try! db.insert(
-    Insert::into("orders").set(oid.set(101)).set(ouid.set(1)).set(amount.set(30)),
+    Insert::into("orders")
+    .set(oid.set(101))
+    .set(ouid.set(1))
+    .set(amount.set(30)),
   )
 
   // Alice: age 50 > max(20, 30) -> kept. Bob: max over no rows is null -> dropped.

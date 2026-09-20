@@ -39,16 +39,23 @@ pub fn[T] Column::asc(Self[T]) -> Order
 pub fn[T] Column::desc(Self[T]) -> Order
 pub fn[T : ToValue] Column::eq(Self[T], T) -> Condition
 pub fn[T] Column::eq_col(Self[T], Self[T]) -> Condition
+pub fn[T] Column::eq_sub(Self[T], Select) -> Condition
 pub fn[T : ToValue] Column::gt(Self[T], T) -> Condition
+pub fn[T] Column::gt_sub(Self[T], Select) -> Condition
 pub fn[T : ToValue] Column::gte(Self[T], T) -> Condition
+pub fn[T] Column::gte_sub(Self[T], Select) -> Condition
 pub fn[T : ToValue] Column::in_(Self[T], Array[T]) -> Condition
+pub fn[T] Column::in_select(Self[T], Select) -> Condition
 pub fn[T] Column::is_not_null(Self[T]) -> Condition
 pub fn[T] Column::is_null(Self[T]) -> Condition
 pub fn[T : ToValue] Column::like(Self[T], T) -> Condition
 pub fn[T : ToValue] Column::lt(Self[T], T) -> Condition
+pub fn[T] Column::lt_sub(Self[T], Select) -> Condition
 pub fn[T : ToValue] Column::lte(Self[T], T) -> Condition
+pub fn[T] Column::lte_sub(Self[T], Select) -> Condition
 pub fn[T] Column::name(Self[T]) -> String
 pub fn[T : ToValue] Column::ne(Self[T], T) -> Condition
+pub fn[T] Column::ne_sub(Self[T], Select) -> Condition
 pub fn[T] Column::new(String, String) -> Self[T]
 pub fn[T : ToValue] Column::set(Self[T], T) -> Assignment
 pub fn[T] Column::table(Self[T]) -> String
@@ -72,15 +79,19 @@ pub enum CompareOp {
 pub enum Condition {
   Compare(ColumnRef, CompareOp, Value)
   CompareCol(ColumnRef, CompareOp, ColumnRef)
+  CompareSub(ColumnRef, CompareOp, Select)
   In(ColumnRef, Array[Value])
+  InSelect(ColumnRef, Select)
   IsNull(ColumnRef)
   IsNotNull(ColumnRef)
+  Exists(Select)
   And(Condition, Condition)
   Or(Condition, Condition)
   Not(Condition)
   Raw(String)
 } derive(Eq, @debug.Debug)
 pub fn Condition::and_(Self, Self) -> Self
+pub fn Condition::exists(Select) -> Self
 pub fn Condition::not_(Self) -> Self
 pub fn Condition::or_(Self, Self) -> Self
 pub fn Condition::raw(String) -> Self
@@ -107,7 +118,14 @@ pub fn Insert::build(Self) -> Statement raise OrmError
 pub fn Insert::into(String) -> Self
 pub fn Insert::set(Self, Assignment) -> Self
 
-type Join
+type Join derive(Eq, @debug.Debug)
+
+pub enum JoinKind {
+  Inner
+  Left
+  Right
+  Full
+} derive(Eq, @debug.Debug)
 
 pub struct Memory {
   tables : @hashmap.HashMap[String, MemoryTable]
@@ -146,21 +164,24 @@ pub struct Select {
   orders : Array[Order]
   limit : Int?
   offset : Int?
-}
+} derive(Eq, @debug.Debug)
 pub fn[T] Select::avg(Self, Column[T]) -> Self
 pub fn Select::build(Self) -> Statement raise OrmError
 pub fn Select::columns(Self, Array[ColumnRef]) -> Self
 pub fn Select::count(Self) -> Self
 pub fn[T] Select::count_of(Self, Column[T]) -> Self
 pub fn Select::from(String) -> Self
+pub fn Select::full_join(Self, String, Condition) -> Self
 pub fn[T] Select::group_by(Self, Column[T]) -> Self
 pub fn Select::having(Self, Condition) -> Self
 pub fn Select::join(Self, String, Condition) -> Self
+pub fn Select::left_join(Self, String, Condition) -> Self
 pub fn Select::limit(Self, Int) -> Self
 pub fn[T] Select::max(Self, Column[T]) -> Self
 pub fn[T] Select::min(Self, Column[T]) -> Self
 pub fn Select::offset(Self, Int) -> Self
 pub fn Select::order_by(Self, Order) -> Self
+pub fn Select::right_join(Self, String, Condition) -> Self
 pub fn[T] Select::sum(Self, Column[T]) -> Self
 pub fn Select::where_(Self, Condition) -> Self
 
@@ -216,3 +237,9 @@ pub impl ToValue for Int
 pub impl ToValue for Double
 pub impl ToValue for String
 pub impl ToValue for Bytes
+
+pub(open) trait Transactional {
+  fn begin(Self) -> Unit raise OrmError
+  fn commit(Self) -> Unit raise OrmError
+  fn rollback(Self) -> Unit raise OrmError
+}

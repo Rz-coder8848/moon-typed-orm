@@ -106,9 +106,11 @@ let user_id : Column[Int] = Column::new("orders", "user_id")
 
 ///|
 let stmt = Select::from("users")
-  .where_(Column::new("users", "id").in_select(
-    Select::from("orders").columns([user_id.to_ref()]),
-  ))
+  .where_(
+    Column::new("users", "id").in_select(
+      Select::from("orders").columns([user_id.to_ref()]),
+    ),
+  )
   .build()
 // SELECT * FROM "users" WHERE "users"."id" IN (SELECT "orders"."user_id" FROM "orders")
 // `Condition::exists(sub)` gives EXISTS; wrap in `.not_()` for NOT EXISTS.
@@ -117,19 +119,21 @@ let stmt = Select::from("users")
 ```moonbit nocheck
 ///|
 let uid : Column[Int] = Column::new("users", "id")
+
+///|
 let ouid : Column[Int] = Column::new("orders", "user_id")
 
 ///|
 let stmt = Select::from("users")
-  .where_(Condition::exists(
-    Select::from("orders").where_(ouid.eq_col(uid)),
-  ))
+  .where_(Condition::exists(Select::from("orders").where_(ouid.eq_col(uid))))
   .build()
 // SELECT * FROM "users" WHERE EXISTS (SELECT * FROM "orders" WHERE "orders"."user_id" = "users"."id")
 
 ///|
 let age : Column[Int] = Column::new("users", "age")
 // users whose age is above the average:
+
+///|
 let stmt2 = Select::from("users")
   .where_(age.gt_sub(Select::from("users").avg(age)))
   .build()
