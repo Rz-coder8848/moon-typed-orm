@@ -1,4 +1,4 @@
-name = "moonorm/moonorm"
+name = "Rz-coder8848/moonorm"
 
 version = "0.1.0"
 

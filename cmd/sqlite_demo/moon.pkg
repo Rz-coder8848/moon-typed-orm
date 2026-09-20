@@ -1,6 +1,6 @@
 import {
-  "moonorm/moonorm",
-  "moonorm/moonorm/sqlite",
+  "Rz-coder8848/moonorm",
+  "Rz-coder8848/moonorm/sqlite",
 }
 
 supported_targets = "native"

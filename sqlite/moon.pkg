@@ -1,5 +1,5 @@
 import {
-  "moonorm/moonorm",
+  "Rz-coder8848/moonorm",
   "moonbitlang/core/encoding/utf8",
 }
 

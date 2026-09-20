@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "moonorm/moonorm"
+package "Rz-coder8848/moonorm"
 
 import {
   "moonbitlang/core/debug",

@@ -1,5 +1,8 @@
 # MoonORM
 
+[![CI](https://github.com/Rz-coder8848/moonorm/actions/workflows/ci.yml/badge.svg)](https://github.com/Rz-coder8848/moonorm/actions)
+[mooncakes.io](https://mooncakes.io/packages/Rz-coder8848/moonorm)
+
 A typed, injection-safe SQL query builder for MoonBit, with a pluggable
 connection boundary and two backends: a dependency-free in-memory store and a
 native SQLite driver.
@@ -224,3 +227,7 @@ transaction.
 ## License
 
 Apache-2.0.
+
+The native backend vendors the SQLite amalgamation (`sqlite/sqlite3.c` and
+`sqlite3.h`, version 3.53.4). SQLite is in the public domain, so it carries no
+license terms and imposes no restrictions on use or redistribution.
