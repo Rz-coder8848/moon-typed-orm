@@ -1,5 +1,5 @@
 ///|
-/// SQLite backend for MoonORM.
+/// SQLite backend for Moon-Typed-ORM.
 ///
 /// Renders a builder with `build()`, prepares the SQL with `sqlite3_prepare_v2`,
 /// binds each [`Value`] positionally through the matching `sqlite3_bind_*`, then

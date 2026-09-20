@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "Rz-coder8848/moonorm"
+package "Rz-coder8848/moon-typed-orm"
 
 import {
   "moonbitlang/core/debug",

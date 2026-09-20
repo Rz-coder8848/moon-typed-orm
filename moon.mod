@@ -1,10 +1,10 @@
-name = "Rz-coder8848/moonorm"
+name = "Rz-coder8848/moon-typed-orm"
 
 version = "0.1.0"
 
 readme = "README.mbt.md"
 
-repository = "https://github.com/Rz-coder8848/moonorm"
+repository = "https://github.com/Rz-coder8848/moon-typed-orm"
 
 license = "Apache-2.0"
 

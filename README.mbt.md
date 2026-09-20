@@ -1,7 +1,7 @@
-# MoonORM
+# Moon-Typed-ORM
 
-[![CI](https://github.com/Rz-coder8848/moonorm/actions/workflows/ci.yml/badge.svg)](https://github.com/Rz-coder8848/moonorm/actions)
-[mooncakes.io](https://mooncakes.io/packages/Rz-coder8848/moonorm)
+[![CI](https://github.com/Rz-coder8848/moon-typed-orm/actions/workflows/ci.yml/badge.svg)](https://github.com/Rz-coder8848/moon-typed-orm/actions)
+[mooncakes.io](https://mooncakes.io/packages/Rz-coder8848/moon-typed-orm)
 
 A typed, injection-safe SQL query builder for MoonBit, with a pluggable
 connection boundary and two backends: a dependency-free in-memory store and a

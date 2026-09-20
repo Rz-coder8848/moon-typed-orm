@@ -1,5 +1,5 @@
 ///|
-/// MoonORM — a typed, injection-safe SQL query builder with a pluggable
+/// Moon-Typed-ORM — a typed, injection-safe SQL query builder with a pluggable
 /// connection boundary.
 ///
 /// See `README.mbt.md` for a walkthrough. The public surface is split by

@@ -1,6 +1,6 @@
 import {
-  "Rz-coder8848/moonorm",
-  "Rz-coder8848/moonorm/sqlite",
+  "Rz-coder8848/moon-typed-orm" @moonorm,
+  "Rz-coder8848/moon-typed-orm/sqlite",
 }
 
 supported_targets = "native"

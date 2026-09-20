@@ -1,5 +1,5 @@
 import {
-  "Rz-coder8848/moonorm",
+  "Rz-coder8848/moon-typed-orm" @moonorm,
 }
 
 pkgtype(kind: "executable")
