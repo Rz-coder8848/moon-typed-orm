@@ -28,8 +28,8 @@ let stmt = Select::from("users")
 - `ast.mbt` — the DSL: `Column`, `Condition`, `Order`, `Assignment`.
 - `query.mbt` — `Select` / `Insert` / `Update` / `Delete` builders and `Statement`,
   plus aggregates (`COUNT` / `SUM` / `AVG` / `MIN` / `MAX`), `GROUP BY` / `HAVING`,
-  `INNER` / `LEFT` / `RIGHT` / `FULL JOIN`, and non-correlated subqueries
-  (`IN` / `EXISTS`).
+  `INNER` / `LEFT` / `RIGHT` / `FULL JOIN`, and subqueries (`IN` / `EXISTS`,
+  scalar comparison, and correlated).
 - `conn.mbt` — `Row`, `ExecResult`, and the `Connection` / `Transactional` traits.
 - `memory.mbt` — an in-memory `Connection` implementation (no FFI, no deps).
 - `error.mbt` — `OrmError`.
@@ -40,7 +40,7 @@ let stmt = Select::from("users")
 ## Running
 
 ```sh
-moon test                    # 41 tests on wasm-gc: SQL rendering, errors, CRUD, joins, subqueries
+moon test                    # 48 tests on wasm-gc: SQL rendering, errors, CRUD, joins, subqueries
 moon test --target native    # + 3 SQLite tests (CRUD, null/float, transactions)
 moon run cmd/main            # in-memory demo: build -> execute -> rows
 moon run cmd/sqlite_demo --target native  # the same demo against SQLite
@@ -97,7 +97,8 @@ let stmt = Select::from("orders")
 // are the outer joins.
 ```
 
-Non-correlated subqueries plug into `WHERE`:
+Subqueries plug into `WHERE`. They may reference the outer query's columns —
+a correlated subquery — or be compared to a single value (a scalar subquery):
 
 ```moonbit nocheck
 ///|
@@ -111,6 +112,28 @@ let stmt = Select::from("users")
   .build()
 // SELECT * FROM "users" WHERE "users"."id" IN (SELECT "orders"."user_id" FROM "orders")
 // `Condition::exists(sub)` gives EXISTS; wrap in `.not_()` for NOT EXISTS.
+```
+
+```moonbit nocheck
+///|
+let uid : Column[Int] = Column::new("users", "id")
+let ouid : Column[Int] = Column::new("orders", "user_id")
+
+///|
+let stmt = Select::from("users")
+  .where_(Condition::exists(
+    Select::from("orders").where_(ouid.eq_col(uid)),
+  ))
+  .build()
+// SELECT * FROM "users" WHERE EXISTS (SELECT * FROM "orders" WHERE "orders"."user_id" = "users"."id")
+
+///|
+let age : Column[Int] = Column::new("users", "age")
+// users whose age is above the average:
+let stmt2 = Select::from("users")
+  .where_(age.gt_sub(Select::from("users").avg(age)))
+  .build()
+// SELECT * FROM "users" WHERE "users"."age" > (SELECT AVG("users"."age") FROM "users")
 ```
 
 ## The `Connection` boundary
@@ -186,8 +209,9 @@ transaction.
 
 - One join per `SELECT` (`INNER` / `LEFT` / `RIGHT` / `FULL`); the in-memory
   backend evaluates all four join kinds, padding the missing side with nulls.
-- Subqueries are non-correlated (`IN` / `EXISTS`) — a subquery cannot reference
-  the outer row. Correlated and scalar subqueries are not supported.
+- Subqueries support `IN`, `EXISTS`, and scalar comparison, and may be
+  correlated — they can reference the outer row. Correlation is single-level:
+  a subquery sees its immediate outer query's columns, not a grand-outer.
 - Transactions are opt-in via `Transactional`: `Sqlite` implements it, `Memory`
   does not.
 - `Condition::raw` works for SQL rendering but is rejected by `Memory`.
