@@ -35,7 +35,7 @@ pub fn Memory::create_table(
 
 ///|
 pub impl Connection for Memory with fn select(self, query) {
-  mem_select(self, query)
+  mem_select(self, query, None)
 }
 
 ///|
@@ -91,7 +91,7 @@ fn join_rows(
   for i, lr in left.rows {
     for j, rr in right.rows {
       let combined = lr + rr
-      if matches(mem, Some(join.on), columns, combined) {
+      if matches(mem, Some(join.on), [left_table, join.table], columns, combined, None) {
         matched.push(combined)
         left_matched[i] = true
         right_matched[j] = true
@@ -145,12 +145,20 @@ fn null_row(n : Int) -> Array[Value] {
 }
 
 ///|
-fn mem_select(mem : Memory, query : Select) -> Array[Row] raise OrmError {
+fn mem_select(
+  mem : Memory,
+  query : Select,
+  outer : (Array[String], Array[Value])?,
+) -> Array[Row] raise OrmError {
   validate_supported(query.condition)
   validate_supported(query.having)
   match query.join {
     Some(j) => validate_supported(Some(j.on))
     None => ()
+  }
+  let tables = match query.join {
+    None => [query.table]
+    Some(j) => [query.table, j.table]
   }
   let (columns, rows) = match query.join {
     None => {
@@ -161,7 +169,7 @@ fn mem_select(mem : Memory, query : Select) -> Array[Row] raise OrmError {
   }
   let filtered : Array[Array[Value]] = []
   for row in rows {
-    if matches(mem, query.condition, columns, row) {
+    if matches(mem, query.condition, tables, columns, row, outer) {
       filtered.push(row)
     }
   }
@@ -180,7 +188,7 @@ fn mem_select(mem : Memory, query : Select) -> Array[Row] raise OrmError {
       }
     }
   } else {
-    mem_select_grouped(mem, columns, query, filtered)
+    mem_select_grouped(mem, tables, columns, query, filtered)
   }
 }
 
@@ -204,7 +212,7 @@ fn mem_update(mem : Memory, query : Update) -> ExecResult raise OrmError {
   let mut affected = 0
   let updated : Array[Array[Value]] = []
   for row in table.rows {
-    if matches(mem, query.condition, table.columns, row) {
+    if matches(mem, query.condition, [query.table], table.columns, row, None) {
       affected = affected + 1
       updated.push(apply_assignments(row, table.columns, query.assignments))
     } else {
@@ -221,7 +229,7 @@ fn mem_delete(mem : Memory, query : Delete) -> ExecResult raise OrmError {
   let table = get_table(mem.tables, query.table)
   let kept : Array[Array[Value]] = []
   for row in table.rows {
-    if !matches(mem, query.condition, table.columns, row) {
+    if !matches(mem, query.condition, [query.table], table.columns, row, None) {
       kept.push(row)
     }
   }
@@ -234,12 +242,14 @@ fn mem_delete(mem : Memory, query : Delete) -> ExecResult raise OrmError {
 fn matches(
   mem : Memory,
   condition : Condition?,
+  tables : Array[String],
   columns : Array[String],
   row : Array[Value],
+  outer : (Array[String], Array[Value])?,
 ) -> Bool raise OrmError {
   match condition {
     None => true
-    Some(c) => eval_condition(mem, c, columns, row)
+    Some(c) => eval_condition(mem, c, tables, columns, row, outer)
   }
 }
 
@@ -247,68 +257,74 @@ fn matches(
 fn eval_condition(
   mem : Memory,
   cond : Condition,
+  tables : Array[String],
   columns : Array[String],
   row : Array[Value],
+  outer : (Array[String], Array[Value])?,
 ) -> Bool raise OrmError {
   match cond {
     Condition::Compare(col, op, value) =>
-      match column_value(col, columns, row) {
+      match column_value_scoped(col, tables, columns, row, outer) {
         None => false
         Some(actual) => compare_values(actual, op, value)
       }
     Condition::CompareCol(left, op, right) =>
-      match
-        (column_value(left, columns, row), column_value(right, columns, row)) {
+      match (
+        column_value_scoped(left, tables, columns, row, outer),
+        column_value_scoped(right, tables, columns, row, outer),
+      ) {
         (Some(a), Some(b)) => compare_values(a, op, b)
         _ => false
       }
     Condition::CompareSub(col, op, sub) => {
-      let sub_rows = mem_select(mem, sub)
+      let sub_rows = mem_select(mem, sub, Some((columns, row)))
       match sub_rows.get(0) {
         None => false
         Some(r) =>
-          match (column_value(col, columns, row), r.get_at(0)) {
+          match (column_value_scoped(col, tables, columns, row, outer), r.get_at(0)) {
             (Some(actual), Some(scalar)) => compare_values(actual, op, scalar)
             _ => false
           }
       }
     }
     Condition::In(col, values) =>
-      match column_value(col, columns, row) {
+      match column_value_scoped(col, tables, columns, row, outer) {
         None => false
         Some(actual) => values.contains(actual)
       }
     Condition::InSelect(col, sub) => {
-      let sub_rows = mem_select(mem, sub)
+      let sub_rows = mem_select(mem, sub, Some((columns, row)))
       let vals = sub_rows.map(fn(r) {
         match r.get_at(0) {
           None => Value::Null
           Some(v) => v
         }
       })
-      match column_value(col, columns, row) {
+      match column_value_scoped(col, tables, columns, row, outer) {
         None => false
         Some(actual) => vals.contains(actual)
       }
     }
     Condition::IsNull(col) =>
-      match column_value(col, columns, row) {
+      match column_value_scoped(col, tables, columns, row, outer) {
         None => true
         Some(Value::Null) => true
         Some(_) => false
       }
     Condition::IsNotNull(col) =>
-      match column_value(col, columns, row) {
+      match column_value_scoped(col, tables, columns, row, outer) {
         None => false
         Some(Value::Null) => false
         Some(_) => true
       }
-    Condition::Exists(sub) => !mem_select(mem, sub).is_empty()
+    Condition::Exists(sub) => !mem_select(mem, sub, Some((columns, row))).is_empty()
     Condition::And(a, b) =>
-      eval_condition(mem, a, columns, row) && eval_condition(mem, b, columns, row)
+      eval_condition(mem, a, tables, columns, row, outer) &&
+      eval_condition(mem, b, tables, columns, row, outer)
     Condition::Or(a, b) =>
-      eval_condition(mem, a, columns, row) || eval_condition(mem, b, columns, row)
-    Condition::Not(a) => !eval_condition(mem, a, columns, row)
+      eval_condition(mem, a, tables, columns, row, outer) ||
+      eval_condition(mem, b, tables, columns, row, outer)
+    Condition::Not(a) => !eval_condition(mem, a, tables, columns, row, outer)
     Condition::Raw(_) => false
   }
 }
@@ -355,6 +371,52 @@ fn column_value(
     }
   }
   None
+}
+
+///|
+/// Resolve `col` within a single table scope. Only columns whose table is one of
+/// `tables` are matched unqualified — this is what keeps an inner column from
+/// shadowing an outer column of the same name in a correlated subquery.
+fn resolve_in_scope(
+  col : ColumnRef,
+  tables : Array[String],
+  columns : Array[String],
+  row : Array[Value],
+) -> Value? {
+  let qualified = col.table + "." + col.name
+  for i, name in columns {
+    if name == qualified {
+      return row.get(i)
+    }
+  }
+  if tables.contains(col.table) {
+    for i, name in columns {
+      if name == col.name {
+        return row.get(i)
+      }
+    }
+  }
+  None
+}
+
+///|
+/// Resolve `col` against the current scope first, then fall back to the outer
+/// scope — the row a correlated subquery is being evaluated against.
+fn column_value_scoped(
+  col : ColumnRef,
+  tables : Array[String],
+  columns : Array[String],
+  row : Array[Value],
+  outer : (Array[String], Array[Value])?,
+) -> Value? {
+  match resolve_in_scope(col, tables, columns, row) {
+    None =>
+      match outer {
+        None => None
+        Some((ocols, orow)) => column_value(col, ocols, orow)
+      }
+    Some(v) => Some(v)
+  }
 }
 
 ///|
@@ -700,6 +762,7 @@ fn extreme_value(vals : Array[Value?], want_max : Bool) -> Value {
 /// distinct grouping key when there is no aggregate).
 fn mem_select_grouped(
   mem : Memory,
+  tables : Array[String],
   columns : Array[String],
   query : Select,
   filtered : Array[Array[Value]],
@@ -712,7 +775,7 @@ fn mem_select_grouped(
   }
   let out_rows : Array[Array[Value]] = []
   for (key, group) in groups {
-    if matches(mem, query.having, group_cols, key) {
+    if matches(mem, query.having, tables, group_cols, key, None) {
       match query.aggregate {
         Some(agg) => out_rows.push(key + [aggregate_value(agg, columns, group)])
         None => out_rows.push(key)

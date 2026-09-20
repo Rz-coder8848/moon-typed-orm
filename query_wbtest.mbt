@@ -310,3 +310,16 @@ test "scalar subquery renders comparison" {
   )
   assert_true(stmt.params.is_empty())
 }
+
+///|
+test "correlated exists renders outer column in subquery" {
+  let uid : Column[Int] = Column::new("users", "id")
+  let ouid : Column[Int] = Column::new("orders", "user_id")
+  let sub = Select::from("orders").where_(ouid.eq_col(uid))
+  let stmt = try! Select::from("users").where_(Condition::exists(sub)).build()
+  assert_eq(
+    stmt.sql,
+    "SELECT * FROM \"users\" WHERE EXISTS (SELECT * FROM \"orders\" WHERE \"orders\".\"user_id\" = \"users\".\"id\")",
+  )
+  assert_true(stmt.params.is_empty())
+}

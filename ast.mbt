@@ -98,8 +98,9 @@ pub fn Condition::raw(sql : String) -> Condition {
 
 ///|
 /// `EXISTS (SELECT ...)` — true when the subquery returns at least one row.
-/// Combine with [`Condition::not_`] for `NOT EXISTS`. Non-correlated only: the
-/// subquery cannot reference the outer query's rows.
+/// Combine with [`Condition::not_`] for `NOT EXISTS`. The subquery may reference
+/// the outer query's columns (a correlated subquery): a qualified column that
+/// names a table outside the subquery resolves against the outer row.
 pub fn Condition::exists(sub : Select) -> Condition {
   Condition::Exists(sub)
 }
@@ -227,7 +228,7 @@ pub fn[T : ToValue] Column::in_(
 ///|
 /// Match this column against a single-column subquery (`col IN (SELECT ...)`).
 /// The subquery selects one column; the in-memory backend uses its first. The
-/// subquery is non-correlated: it cannot reference the outer query's rows.
+/// subquery may reference the outer query's columns (a correlated subquery).
 pub fn[T] Column::in_select(self : Column[T], sub : Select) -> Condition {
   Condition::InSelect(self.reference, sub)
 }

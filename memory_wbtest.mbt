@@ -442,3 +442,91 @@ test "memory scalar subquery over no rows compares false" {
   let rows = try! db.select(Select::from("users").where_(age.eq_sub(sub)))
   assert_eq(rows.length(), 0)
 }
+
+///|
+test "memory correlated exists resolves outer column" {
+  let db = Memory::new()
+  try! db.create_table("users", ["id", "name"])
+  try! db.create_table("orders", ["id", "user_id", "item"])
+  let uid : Column[Int] = Column::new("users", "id")
+  let uname : Column[String] = Column::new("users", "name")
+  let oid : Column[Int] = Column::new("orders", "id")
+  let ouid : Column[Int] = Column::new("orders", "user_id")
+  let item : Column[String] = Column::new("orders", "item")
+
+  let _ = try! db.insert(Insert::into("users").set(uid.set(1)).set(uname.set("alice")))
+  let _ = try! db.insert(Insert::into("users").set(uid.set(2)).set(uname.set("bob")))
+  let _ = try! db.insert(Insert::into("users").set(uid.set(3)).set(uname.set("carol")))
+  let _ = try! db.insert(
+    Insert::into("orders").set(oid.set(100)).set(ouid.set(1)).set(item.set("book")),
+  )
+  let _ = try! db.insert(
+    Insert::into("orders").set(oid.set(101)).set(ouid.set(3)).set(item.set("cup")),
+  )
+
+  // `users.id` is the outer column; `orders` also has an `id`, so a naive
+  // unqualified lookup would shadow it. This must resolve per outer row.
+  let sub = Select::from("orders").where_(ouid.eq_col(uid))
+  let rows = try! db.select(
+    Select::from("users").where_(Condition::exists(sub)).order_by(uid.asc()),
+  )
+  assert_eq(rows.length(), 2)
+  assert_eq(rows[0].get("name"), Some(Value::Text("alice")))
+  assert_eq(rows[1].get("name"), Some(Value::Text("carol")))
+}
+
+///|
+test "memory correlated not exists finds missing rows" {
+  let db = Memory::new()
+  try! db.create_table("users", ["id", "name"])
+  try! db.create_table("orders", ["id", "user_id"])
+  let uid : Column[Int] = Column::new("users", "id")
+  let uname : Column[String] = Column::new("users", "name")
+  let oid : Column[Int] = Column::new("orders", "id")
+  let ouid : Column[Int] = Column::new("orders", "user_id")
+
+  let _ = try! db.insert(Insert::into("users").set(uid.set(1)).set(uname.set("alice")))
+  let _ = try! db.insert(Insert::into("users").set(uid.set(2)).set(uname.set("bob")))
+  let _ = try! db.insert(Insert::into("orders").set(oid.set(100)).set(ouid.set(1)))
+
+  let sub = Select::from("orders").where_(ouid.eq_col(uid))
+  let rows = try! db.select(
+    Select::from("users").where_(Condition::exists(sub).not_()),
+  )
+  assert_eq(rows.length(), 1)
+  assert_eq(rows[0].get("name"), Some(Value::Text("bob")))
+}
+
+///|
+test "memory correlated scalar subquery compares per outer row" {
+  let db = Memory::new()
+  try! db.create_table("users", ["id", "name", "age"])
+  try! db.create_table("orders", ["id", "user_id", "amount"])
+  let uid : Column[Int] = Column::new("users", "id")
+  let uname : Column[String] = Column::new("users", "name")
+  let age : Column[Int] = Column::new("users", "age")
+  let oid : Column[Int] = Column::new("orders", "id")
+  let ouid : Column[Int] = Column::new("orders", "user_id")
+  let amount : Column[Int] = Column::new("orders", "amount")
+
+  let _ = try! db.insert(
+    Insert::into("users").set(uid.set(1)).set(uname.set("alice")).set(age.set(50)),
+  )
+  let _ = try! db.insert(
+    Insert::into("users").set(uid.set(2)).set(uname.set("bob")).set(age.set(10)),
+  )
+  let _ = try! db.insert(
+    Insert::into("orders").set(oid.set(100)).set(ouid.set(1)).set(amount.set(20)),
+  )
+  let _ = try! db.insert(
+    Insert::into("orders").set(oid.set(101)).set(ouid.set(1)).set(amount.set(30)),
+  )
+
+  // Alice: age 50 > max(20, 30) -> kept. Bob: max over no rows is null -> dropped.
+  let sub = Select::from("orders").where_(ouid.eq_col(uid)).max(amount)
+  let rows = try! db.select(
+    Select::from("users").where_(age.gt_sub(sub)).order_by(uid.asc()),
+  )
+  assert_eq(rows.length(), 1)
+  assert_eq(rows[0].get("name"), Some(Value::Text("alice")))
+}
