@@ -4,8 +4,10 @@
 [mooncakes.io](https://mooncakes.io/packages/Rz-coder8848/moon-typed-orm)
 
 A typed, injection-safe SQL query builder for MoonBit, with a pluggable
-connection boundary and two backends: a dependency-free in-memory store and a
-native SQLite driver.
+connection boundary and three backends: a dependency-free in-memory store, a
+native SQLite driver, and a
+[moondb](https://mooncakes.io/packages/moonbitstack/moondb) adapter that runs the
+same DSL on any moondb driver.
 
 SQL is built through a small DSL of typed columns instead of string
 concatenation. Every value is bound as a positional parameter, so there is no
@@ -37,6 +39,9 @@ let stmt = Select::from("users")
 - `memory.mbt` — an in-memory `Connection` implementation (no FFI, no deps).
 - `error.mbt` — `OrmError`.
 - `sqlite/` — a native SQLite `Connection` over a vendored SQLite amalgamation.
+- `moondb/` — a separate package (`Rz-coder8848/moon-typed-orm-moondb`) that
+  implements the same traits over the moondb driver seam, so the DSL drives any
+  moondb driver.
 - `cmd/main` / `cmd/sqlite_demo` — runnable demos of the same builders against
   the in-memory backend and against SQLite.
 
@@ -47,6 +52,7 @@ moon test                    # 48 tests on wasm-gc: SQL rendering, errors, CRUD,
 moon test --target native    # + 3 SQLite tests (CRUD, null/float, transactions)
 moon run cmd/main            # in-memory demo: build -> execute -> rows
 moon run cmd/sqlite_demo --target native  # the same demo against SQLite
+cd moondb && moon test       # the moondb adapter's 4 tests, against @moondb.MockDriver
 ```
 
 The core library has no external dependencies beyond the MoonBit core library.
@@ -198,6 +204,29 @@ pub(open) trait Transactional {
 two demos show the boundary side by side: `cmd/main` runs on `Memory`, while
 `cmd/sqlite_demo` runs the same builders on `Sqlite` and wraps seeding in a
 transaction.
+
+### The moondb backend
+
+The root package owns no driver contract, so a second package — `moondb/`
+(`Rz-coder8848/moon-typed-orm-moondb`) — implements the same `Connection` /
+`Transactional` traits on top of the standard
+[moondb](https://mooncakes.io/packages/moonbitstack/moondb) driver seam. That is
+the shared interface the MoonBit database stack (moonorm and its drivers) is
+built on, so this adapter makes the typed DSL *extend* the ecosystem instead of
+duplicating it: wrap any `@moondb.Driver` and the same builder code drives
+SQLite, Postgres, MySQL, or the dependency-free `@moondb.MockDriver`.
+
+```moonbit nocheck
+// moon.pkg: import { "Rz-coder8848/moon-typed-orm-moondb" @mdb }
+let db = @mdb.Moondb::new(driver) // driver : &@moondb.Driver, e.g. moonsqlite
+
+db.insert(Insert::into("users").set(id.set(1)).set(name.set("alice")))
+let rows = db.select(Select::from("users"))
+```
+
+The adapter renders with `build()` and maps values onto `@moondb.Value`, so a
+driver error surfaces as `OrmError::Backend`. Its tests run against
+`MockDriver` and need no database.
 
 ## Design notes
 

@@ -1,0 +1,11 @@
+// The moondb backend for moon-typed-orm, kept as a separate package (own moon.mod)
+// so the root package never pulls the wasm-gc-preferred moondb seam into its native
+// SQLite build. It implements the root package's `Connection` / `Transactional`
+// traits on top of any `@db.Driver`, so one typed-DSL codebase drives SQLite,
+// Postgres, MySQL, or `@db.MockDriver` interchangeably — the caller swaps the
+// driver, not the query code.
+
+import {
+  "Rz-coder8848/moon-typed-orm" @moonorm,
+  "moonbitstack/moondb" @db,
+}
